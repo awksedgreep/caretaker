@@ -39,18 +39,39 @@ defmodule Caretaker.CWMP.SOAP do
           ""
       end
 
-    header_xml =
+    header_map = %{}
+    header_map =
       case id do
-        nil ->
-          ""
+        nil -> header_map
+        id -> Map.put(header_map, "cwmp:ID", %{"@mustUnderstand" => "1", "#text" => id})
+      end
 
-        id ->
-          {:ok, frag} =
-            Lather.Xml.Builder.build_fragment(%{
-              "cwmp:ID" => %{"@mustUnderstand" => "1", "#text" => id}
-            })
+    header_map =
+      case Map.get(headers, :hold_requests) do
+        true -> Map.put(header_map, "cwmp:HoldRequests", "1")
+        false -> Map.put(header_map, "cwmp:HoldRequests", "0")
+        _ -> header_map
+      end
 
-          frag
+    header_map =
+      case Map.get(headers, :no_more_requests) do
+        true -> Map.put(header_map, "cwmp:NoMoreRequests", "1")
+        false -> Map.put(header_map, "cwmp:NoMoreRequests", "0")
+        _ -> header_map
+      end
+
+    header_map =
+      case Map.get(headers, :session_timeout) do
+        t when is_integer(t) and t >= 0 -> Map.put(header_map, "cwmp:SessionTimeout", Integer.to_string(t))
+        _ -> header_map
+      end
+
+    header_xml =
+      if map_size(header_map) == 0 do
+        ""
+      else
+        {:ok, frag} = Lather.Xml.Builder.build_fragment(header_map)
+        frag
       end
 
     # Minify fragments to avoid whitespace differences
