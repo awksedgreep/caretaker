@@ -12,7 +12,21 @@ Non-goals
 
 Enhancements (with acceptance criteria)
 
-1) Complete migration from SweetXml/regex parsing to Lather
+Progress (completed)
+- Lather-only parsing for key paths: Inform, GetParameterNames, Fault; ACS.Server dispatch via SOAP.decode_envelope; CPE.Client switched to SOAP.decode_envelope
+- Header compliance: cwmp ns mirroring, cwmp:ID echo, optional HoldRequests/NoMoreRequests/SessionTimeout; tests added
+- RPC codecs added with round-trip tests: Download(+Response), Upload(+Response), TransferComplete(+Response), AutonomousTransferComplete(+Response), Reboot(+Response), FactoryReset(+Response), GetRPCMethods(+Response), GetParameterAttributes(+Response), SetParameterAttributes(+Response), ScheduleInform(+Response), ScheduleDownload(+Response), GetQueuedTransfers(+Response), CancelTransfer(+Response)
+- Interop list handling: normalized MethodList/ParameterNames/AccessList decoding across variations
+- Example harnesses kept minimal and delegated decoding/encoding to library
+
+Open items
+- Diagnostics (Ping/TraceRoute/NSLookup) — codecs or guidance (likely parameter-model based rather than standalone RPCs)
+- Multi-timewindow parity in ScheduleDownload decode (currently validated with single TimeWindow; expand test/decoder to fully support multiple windows)
+- Docs/ExDoc polish: update README supported RPCs, namespace/version behavior, telemetry guide; add examples
+- Telemetry audit to ensure all new RPCs emit encode/decode spans
+- Consider proposing removal of SweetXml (post-migration) as a separate, approved change
+
+1) Complete migration from SweetXml/regex parsing to Lather [DONE]
 - Replace all RPC decoders and any XML parsing in examples/harness to rely on Lather (builders/parsers) only.
 - Target modules/functions:
   - Caretaker.TR069.RPC.Inform.decode/1 (uses SweetXml)
@@ -26,7 +40,7 @@ Enhancements (with acceptance criteria)
   - No regex used to parse RPC names/IDs/body in ACS.Server or CPE.Client
   - All tests pass
 
-2) Envelope handling and header compliance
+2) Envelope handling and header compliance [DONE]
 - Ensure encode/decode mirrors CWMP namespace from request; default to urn:dslforum-org:cwmp-1-0 when unknown.
 - Always echo cwmp:ID with mustUnderstand="1" when an ID is present.
 - Expose optional header fields in encode_envelope/2 (HoldRequests, NoMoreRequests, SessionTimeout) while keeping conservative defaults.
@@ -35,11 +49,12 @@ Enhancements (with acceptance criteria)
   - New tests cover optional header flags round-trip
 
 3) RPC coverage expansion (codecs only)
-- Add encoders/decoders + fixtures + round-trip tests for: Download, Upload, TransferComplete, AutonomousTransferComplete, Reboot, FactoryReset, GetRPCMethods, GetParameterAttributes, SetParameterAttributes, ScheduleInform, Diagnostics (Ping, TraceRoute, NSLookup).
+- Added: Download, Upload, TransferComplete, AutonomousTransferComplete, Reboot, FactoryReset, GetRPCMethods, GetParameterAttributes, SetParameterAttributes, ScheduleInform, ScheduleDownload, GetQueuedTransfers, CancelTransfer
+- Pending: Diagnostics (Ping, TraceRoute, NSLookup), RequestDownload
 - Acceptance:
   - Each RPC has: struct, encode/1, decode/1, fixtures, tests (positive + fault)
 
-4) Fault handling via Lather
+4) Fault handling via Lather [DONE]
 - Decode SOAP Fault and cwmp:Fault strictly via Lather (no regex), mapping to a typed struct.
 - Acceptance:
   - Fault fixtures (SOAP and CWMP) decode deterministically; unknown fields tolerated without crash
@@ -56,7 +71,7 @@ Enhancements (with acceptance criteria)
 - Acceptance:
   - Telemetry present for all RPC encode/decode paths; Logger calls audited for noise
 
-7) Example harness alignment (kept minimal)
+7) Example harness alignment (kept minimal) [DONE]
 - Keep ACS.Server and CPE.Client as examples/test harnesses only; delegate all XML handling to the library functions.
 - Acceptance:
   - ACS.Server uses SOAP.decode_envelope and RPC decoders; CPE.Client uses SOAP.decode_envelope for response parsing; no ad-hoc regex/XML parsing
@@ -71,13 +86,13 @@ Enhancements (with acceptance criteria)
 - Acceptance:
   - This document notes the constraint and defers any dep changes.
 
-Appendix: Known parsing hotspots to address
-- lib/caretaker/acs/server.ex: regex-based detection of GetParameterValuesResponse and other fast-paths.
-- lib/caretaker/cpe/client.ex: regex extraction for xmlns:cwmp, RPC local-name, and cwmp:ID.
-- lib/caretaker/tr069/rpc/inform.ex: decode uses SweetXml.
-- lib/caretaker/tr069/rpc/get_parameter_names.ex: decode uses SweetXml.
-- lib/caretaker/tr069/rpc/fault.ex: decode uses SweetXml and regex fallback.
-- lib/caretaker/cwmp/soap.ex: uses regex only for whitespace minification (acceptable; not parsing).
+Appendix: Known parsing hotspots (addressed)
+- lib/caretaker/acs/server.ex: removed regex fast-paths; unified on SOAP.decode_envelope
+- lib/caretaker/cpe/client.ex: switched to SOAP.decode_envelope; removed regex parsing
+- lib/caretaker/tr069/rpc/inform.ex: migrated to Lather
+- lib/caretaker/tr069/rpc/get_parameter_names.ex: migrated to Lather
+- lib/caretaker/tr069/rpc/fault.ex: migrated to Lather (no regex)
+- lib/caretaker/cwmp/soap.ex: regex only for whitespace minification (acceptable; not parsing)
 
 Note
 - This list is limited to protocol-library scope. Transport/TLS, persistence, operator UIs, and external admin APIs are intentionally out of scope.
