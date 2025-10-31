@@ -39,13 +39,24 @@ Goals
 - Implement RPC encode/decode for Inform and InformResponse.
 - Introduce RPC registry and type validations.
 - Emit TR-069 encode/decode telemetry; add fixtures and round-trip tests.
+
+Status (in progress)
+- DONE: Spec-driven SOAP 1.1 helpers (encode_envelope/2, decode_envelope/1)
+- DONE: Inform and InformResponse structs with encode/1 and decode/1
+- DONE: RPC registry (Inform, InformResponse)
+- DONE: Fixtures and round-trip test (Inform -> InformResponse)
+- DONE: Internal PubSub topic for Inform and MQTT bridge publisher
+- PENDING: Replace regex-based parsing with full Lather builders/parsers and add TR-069 telemetry spans
+
 Tasks
-- Caretaker.CWMP.SOAP: encode_envelope/2, decode_envelope/1 (Lather builders/parsers).
-- Caretaker.TR069.RPC.{Inform, InformResponse}: encode/1, decode/1.
+- Caretaker.CWMP.SOAP: encode_envelope/2, decode_envelope/1 (swap to Lather when ready).
+- Caretaker.TR069.RPC.{Inform, InformResponse}: encode/1, decode/1 (instrument telemetry).
 - Registry: map XML RPC names <-> modules.
 - Test fixtures: sample Inform and InformResponse envelopes; round-trip tests.
+
 Deliverables
 - Working round-trip (Inform -> InformResponse) with fixtures.
+
 Acceptance
 - Tests for encode/decode and registry pass; telemetry events observed in tests.
 
@@ -54,12 +65,26 @@ Goals
 - POST /cwmp endpoint that decodes CWMP SOAP via Lather and routes to RPC handlers.
 - Respond to Inform with InformResponse (CWMP ID correlation).
 - Structured logging + request timing telemetry.
+
+Status (completed minimal scope)
+- DONE: ACS.Server decodes Inform, publishes to PubSub, responds with InformResponse (echo cwmp:ID; mirror CWMP ns; text/xml)
+- DONE: ACS.Session global FIFO queue; empty POST returns next queued command or 204
+- DONE: Queue GetParameterValues("Device.DeviceInfo.") after Inform
+- DONE: Integration tests for Inform -> InformResponse and empty POST flow
+- DONE: Robust SOAP decode using SweetXml (local-name() for RPC, cwmp:ID; graceful errors)
+- DONE: Error handling paths (400 on malformed/unknown RPC) with tests
+- DONE: Telemetry around Inform encode/decode and ACS queue/inform events
+- DONE: 415 on unsupported content-type
+- PENDING: Per-device sessions keyed by DeviceId; swap regex remnants and SweetXml with Lather builders/parsers for full spec conformance; additional telemetry spans
+
 Tasks
 - Expand Caretaker.ACS.Server: body parsing, content-type, error handling, ID correlation.
 - Response via CWMP envelope build; return text/xml; charset=utf-8.
 - Integration tests using Plug.Test; fixture-driven Inform request -> InformResponse.
+
 Deliverables
 - Minimal working ACS that can receive Inform and respond.
+
 Acceptance
 - Integration tests pass; verified content-type and valid SOAP structure.
 
@@ -67,11 +92,19 @@ Acceptance
 Goals
 - Implement GetParameterNames, GetParameterValues, SetParameterValues, AddObject, DeleteObject.
 - Fault handling end-to-end.
+
+Status (completed)
+- DONE: Lather-based encoders/decoders for GetParameterNames(+Response), GetParameterValues(+Response), SetParameterValues(+Response), AddObject(+Response), DeleteObject(+Response)
+- DONE: Fault decoder for cwmp and SOAP Faults
+- DONE: Registry entries + fixtures and round-trip tests
+
 Tasks
 - Structs, encode/decoders; extend registry; error/fault mapping.
 - Fixtures and tests for each RPC.
+
 Deliverables
 - RPC coverage for common provisioning flows; fault round-trips.
+
 Acceptance
 - Unit/integration tests pass; fault scenarios covered.
 

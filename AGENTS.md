@@ -1,199 +1,85 @@
-# AGENTS.md - Critical Rules for AI Agents Working on ddnet Project
+# AGENTS.md - Critical Rules for AI Agents Working on the Caretaker Project
 
-## ABSOLUTE TESTING RULES - NO EXCEPTIONS
-- IF YOU ADD IO.puts to a TEST it must be removed after the test is passing
+This document defines how agents must work in the Caretaker repository. Caretaker is a spec-driven TR-069/TR-181 toolkit intended to provision and manage GPON ONTs and potentially Mikrotik RouterOS devices.
 
 ## 🚨 ABSOLUTE DIRECTORY RULES - NO EXCEPTIONS
 
 ### ✅ CURRENT WORKING DIRECTORY
-- **ALWAYS STAY IN**: `/Users/mcotner/Documents/elixir/ddnet`
-- **NEVER LEAVE THIS DIRECTORY** - All work must be done here
-- **NEVER use `cd` commands** to change to parent directories or other projects
-- **NEVER work in any other Elixir project directories**
+- ALWAYS STAY IN: `/Users/mcotner/Documents/elixir/caretaker`
+- NEVER leave this directory or work in other projects without explicit user permission
+- NEVER use `cd` to parent directories or other repositories
 
 ### 🛑 FORBIDDEN ACTIONS
-- **DO NOT MODIFY ANY CODE IN THE UMBRELLA PROJECT** (`../apps/` or parent directories)
-- **DO NOT CHANGE DIRECTORIES** without explicit user permission
-- **DO NOT ASSUME WHAT NEEDS TO BE FIXED** - ask first
-- **DO NOT WORK ON MULTIPLE PROJECTS** simultaneously
-- **NEVER USE --max-failures with mix test** - it confuses AI agents and provides incomplete information about actual test status
-- **DO NOT RUN mix test --max-failures and then say only that number are failing** - you're lying and it's not nice to lie
-- **DO NOT RUN RAW DDL** - ALWAYS use migrations (mix ecto.gen.migration) for database schema changes
-- **MIGRATIONS SHOULD BE ADDED FOR THE CURRENT DATE ONLY**
-- **ALWAYS RUN `git add -A` (or `git add .`) BEFORE COMMITTING OR TAGGING** to avoid missing files in releases
+- DO NOT assume scope; ask if uncertain
+- DO NOT change directory structure without approval
+- DO NOT add/remove dependencies without approval
+- DO NOT use `IO.puts` or `IO.inspect` in code or tests — use `Logger.xxx`
+- DO NOT run tests with limiting flags (e.g., `--max-failures`)
+- ALWAYS run `git add -A` (or `git add .`) before committing or tagging
 
 ## 📋 PROJECT CONTEXT
 
-### What is ddnet?
-- **ddnet** is a consolidated version of the umbrella project ddumb
-- **ddnet** contains migrated/consolidated code from the umbrella apps
-- **ddnet** is the ONLY codebase we modify for this work
-- The umbrella project (`../apps/`) is the **WORKING, PRODUCTION CODE** that must not be touched
+### What is Caretaker?
+- An Elixir library focused on TR-069/CWMP and TR-181 with a minimal ACS
+- Targets GPON ONTs and potentially Mikrotik devices
+- Strongly spec-driven (SOAP 1.1 + CWMP) with conservative defaults for compatibility
 
-### Work Scope
-- **ONLY fix tests in ddnet project**
-- **ONLY work on test files in `./test/` directory**
-- **ONLY modify ddnet-specific code if absolutely necessary for test fixes**
-- **NEVER modify umbrella project code** (`../apps/`) even if it seems related
+### Work scope (current phases)
+- Phase 1: TR-069 core (Inform/InformResponse) with Lather; CWMP envelope helpers; fixtures and tests
+- Phase 2: Minimal ACS request routing and response generation
+- Later phases: Additional RPCs, TR-181 helpers, client, docs, telemetry expansion
 
-## 🔍 MANDATORY ROOT CAUSE ANALYSIS
+## 🔍 MANDATORY PRACTICES
 
-### Before ANY changes:
-1. **Identify the exact error** - read full error messages
-2. **Analyze WHY the test is failing** - understand the root cause
-3. **Determine if issue is in ddnet code or test setup**
-4. **Ask user for permission** before making any code modifications
-5. **Verify the fix addresses root cause** not just symptoms
+1) Spec-driven CWMP/SOAP
+- Use SOAP 1.1 envelope (`http://schemas.xmlsoap.org/soap/envelope/`)
+- Mirror the CWMP namespace from the CPE request when responding (e.g., `urn:dslforum-org:cwmp-1-0` … `-1-4`)
+- If the incoming version is unknown, default to `urn:dslforum-org:cwmp-1-0` for maximum compatibility
+- Always include `cwmp:ID` with `mustUnderstand="1"` and echo CPE’s ID when required
+- Respond with `Content-Type: text/xml; charset=utf-8`
 
-### Root Cause Categories to Check:
-- **Test configuration issues** (wrong database, wrong environment)
-- **Migration/consolidation issues** (module names, paths changed)
-- **Test isolation problems** (database sandbox, process cleanup)
-- **Dependency issues** (missing deps in ddnet vs umbrella)
-- **Configuration mismatches** (ddnet config vs umbrella config)
+2) TR-069 session and correlation
+- Correlate responses using CWMP ID
+- Maintain per-device session context keyed by DeviceId (OUI, ProductClass, SerialNumber) when implementing ACS flows
+- Prefer generic/spec-compliant behavior before vendor-specific tweaks
 
-## 🧪 TESTING PROTOCOL
+3) Testing protocol
+- ALWAYS run the full suite: `mix test` (no `--max-failures`)
+- Prefer fixture-driven tests for CWMP envelopes and RPCs
+- Attach telemetry handlers in tests to assert events when needed
+- Remove any temporary IO in tests before merging
 
-### Test Command Rules:
-- **ALWAYS use `mix test`** without any limiting flags
-- **NEVER use `--max-failures`** - it provides incomplete information and confuses AI agents
-- **ALWAYS run full test suite** to get accurate count of all failures
-- **NEVER report partial failure counts** as if they represent total failures
-- **ALWAYS wait for complete test run** before analyzing results
+4) Logging
+- Use Logger exclusively; no `IO.puts`/`IO.inspect`
+- Keep logs structured and at appropriate levels
 
-### Why --max-failures is forbidden:
-- **Incomplete data**: Only shows first N failures, not total count
-- **Misleading reports**: AI agents incorrectly report "only N failures" when more exist
-- **Poor analysis**: Root cause analysis requires seeing all failure patterns
-- **False progress**: Makes it seem like fewer issues exist than reality
+5) Version control
+- Stage all changes with `git add -A` before any commit or tag
 
-## 🗄️ DATABASE TESTING STANDARDS - PERMANENT RULES
+## 📁 DIRECTORY LAYOUT CONVENTIONS
+- `priv/spec/tr-069/` — vendored SOAP/CWMP XSDs and spec assets
+- `test/fixtures/tr069/` — envelope samples (Inform, InformResponse, empty requests, etc.)
+- `docs/` — technical notes (e.g., envelope strategy, ACS flow)
 
-### 🚨 MANDATORY: Use Shared Sandbox Mode for ALL Tests
-
-**CRITICAL**: All tests MUST use `Ddnet.DataCase` and shared sandbox mode. Manual sandbox checkout is FORBIDDEN.
-
-### ✅ CORRECT Test Setup Pattern:
-```elixir
-defmodule MyTest do
-  use Ddnet.DataCase, async: false  # Use DataCase, NOT ExUnit.Case
-  @moduletag :unit
-
-  # NO manual setup blocks with Ecto.Adapters.SQL.Sandbox.checkout
-  # DataCase handles all sandbox setup automatically
-end
-```
-
-### 🛑 FORBIDDEN Test Setup Patterns:
-```elixir
-# ❌ NEVER DO THIS:
-defmodule MyTest do
-  use ExUnit.Case, async: false
-
-  setup do
-    Ecto.Adapters.SQL.Sandbox.checkout(Repo)  # FORBIDDEN
-    :ok
-  end
-end
-```
-
-### Why Shared Mode is Mandatory:
-- **Process Safety**: Allows spawned processes (Ash, GenServers) to access database
-- **Framework Compatibility**: Works with Ash framework and other async operations
-- **Reduced Maintenance**: No manual sandbox management required
-- **Consistent Behavior**: All tests use same setup pattern
-- **Cost Reduction**: Prevents expensive debugging cycles
-
-### Database Testing Rules:
-1. **ALWAYS use `Ddnet.DataCase`** instead of `ExUnit.Case` for database tests
-2. **NEVER manually checkout sandboxes** in test setup blocks
-3. **NEVER use manual mode** - shared mode is configured in test_helper.exs
-4. **ALWAYS use `async: false`** for database tests to prevent race conditions
-5. **TRUST the DataCase setup** - it handles all sandbox configuration
-
-### Enforcement:
-- **ANY test that manually checks out sandboxes MUST be fixed immediately**
-- **ANY new test MUST follow the DataCase pattern**
-- **NO EXCEPTIONS** - this rule prevents expensive debugging cycles
-
-## ⚠️ ERROR HANDLING PROTOCOL
-
-### When encountering test failures:
-1. **READ the full error message** - don't assume
-2. **Identify if error is due to consolidation** (module not found, path issues)
-3. **Check if test expects umbrella structure** but running in ddnet
-4. **Verify database/config setup** is correct for ddnet
-5. **Ask user before making ANY code changes**
-
-### Common Consolidation Issues:
-- **Module name mismatches** (umbrella vs ddnet naming)
-- **Database configuration** (ddnet vs umbrella database setup)
-- **Path references** (hardcoded umbrella paths in tests)
-- **Dependency mismatches** (deps available in umbrella but not ddnet)
-
-## 🎯 SUCCESS CRITERIA
-
-### What constitutes successful work:
-- **Tests pass in ddnet project**
-- **No modifications to umbrella project** (`../apps/`)
-- **Root cause identified and documented**
-- **Changes are minimal and targeted**
-- **User approves all code modifications**
-
-### What constitutes failure:
-- **Working in wrong directory**
-- **Modifying umbrella project code**
-- **Assuming what needs to be fixed**
-- **Making changes without root cause analysis**
-- **Breaking working umbrella code**
+## ⚠️ ERROR HANDLING & ANALYSIS
+- Read full errors before acting
+- Identify whether failures are due to parsing, envelope shape, namespace, or test setup
+- Verify fixes address the root cause and remain spec-conformant
+- Ask before large refactors or config changes
 
 ## 📞 COMMUNICATION PROTOCOL
-
-### Always ask before:
-- **Making ANY code changes**
-- **Changing directory structure**
-- **Modifying configuration files**
-- **Adding or removing dependencies**
-- **Assuming scope of work**
-
-### Always report:
-- **Current working directory** when starting work
-- **Root cause analysis** before proposing fixes
-- **Exact changes planned** before implementation
-- **Test results** after any changes
+- Before implementing non-trivial changes, outline the plan and confirm scope
+- Report planned changes and expected impact
+- After changes, report test results and any follow-up items
 
 ## 🚨 EMERGENCY STOP CONDITIONS
+- Unsure about CWMP/CPE version handling or envelope structure
+- Risk of introducing vendor-specific hacks that violate spec
+- Ambiguity about dependency additions or directory changes
+- Unexpected widespread test failures
 
-### Immediately stop and ask if:
-- **You realize you're in wrong directory**
-- **You're about to modify umbrella code**
-- **You don't understand the root cause**
-- **Tests are failing for unknown reasons**
-- **User seems confused about what you're doing**
-
-## 📚 FRAMEWORK DOCUMENTATION
-
-### Ash Framework
-- **Official Documentation**: https://hexdocs.pm/ash/readme.html
-- **Use this for ALL Ash-related work** - don't guess at API syntax
-- **Key areas to reference**:
-  - Query building and filtering
-  - Association loading patterns  
-  - Domain configuration
-  - Action definitions and usage
-
-### Why Documentation Matters:
-- **Prevents trial-and-error coding** that wastes time
-- **Ensures correct API usage** from the start
-- **Reduces debugging cycles** from incorrect assumptions
-- **Improves code quality** with proper patterns
-
-### Before Writing Ash Code:
-1. **Check the documentation first**
-2. **Look for similar examples in codebase**
-3. **Ask for clarification** if API is unclear
-4. **Don't assume syntax** based on other frameworks
-
----
-
-**REMEMBER: The umbrella project is WORKING PRODUCTION CODE. The ddnet project is the consolidation where we fix tests. NEVER confuse the two.**
+## ✅ SUCCESS CRITERIA
+- Tests pass without limiting flags
+- Generated envelopes are spec-conformant and conservative by default
+- Behavior accommodates GPON and Mikrotik devices without vendor lock-in
+- Changes are minimal, targeted, and approved when required

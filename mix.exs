@@ -32,6 +32,8 @@ defmodule Caretaker.MixProject do
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.5"},
       {:telemetry, "~> 1.2"},
+      {:jason, "~> 1.4"},
+      {:tortoise311, "~> 0.12"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end

@@ -1,0 +1,10 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cwmp="urn:dslforum-org:cwmp-1-0">
+  <soapenv:Header>
+    <cwmp:ID mustUnderstand="1">ID123</cwmp:ID>
+  </soapenv:Header>
+  <soapenv:Body>
+    <cwmp:InformResponse>
+      <MaxEnvelopes>1</MaxEnvelopes>
+    </cwmp:InformResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

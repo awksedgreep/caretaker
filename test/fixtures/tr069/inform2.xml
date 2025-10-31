@@ -1,0 +1,22 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cwmp="urn:dslforum-org:cwmp-1-0">
+  <soapenv:Header>
+    <cwmp:ID mustUnderstand="1">ID999</cwmp:ID>
+  </soapenv:Header>
+  <soapenv:Body>
+    <cwmp:Inform>
+      <DeviceId>
+        <Manufacturer>Acme</Manufacturer>
+        <OUI>A1B2C3</OUI>
+        <ProductClass>Router</ProductClass>
+        <SerialNumber>ABC999</SerialNumber>
+      </DeviceId>
+      <Event>
+        <EventStruct><EventCode>1 BOOT</EventCode><CommandKey></CommandKey></EventStruct>
+      </Event>
+      <MaxEnvelopes>1</MaxEnvelopes>
+      <CurrentTime>2025-01-01T00:00:00Z</CurrentTime>
+      <RetryCount>0</RetryCount>
+      <ParameterList xsi:type="cwmp:ParameterValueList" arrayType="xsd:anyType[]" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"></ParameterList>
+    </cwmp:Inform>
+  </soapenv:Body>
+</soapenv:Envelope>
