@@ -62,5 +62,5 @@ Options:
 ## Notes
 
 - Use Logger for all logging; never IO.puts or IO.inspect.
-- The client currently implements a minimal responder for GetParameterValues using the provided device_id.
+- The client currently implements a minimal responder for GetParameterValues and SetParameterValuesResponse; extend as needed.
 - You can extend the responder with additional TR-069 RPCs following the same pattern.

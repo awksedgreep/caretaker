@@ -69,7 +69,7 @@ Attach a handler in tests or your application:
     [:caretaker, :acs, :request, :start],
     [:caretaker, :cpe_client, :session, :stop]
   ],
-  fn event, meas, meta, _cfg -> IO.inspect({event, meas, meta}) end,
+  fn event, meas, meta, _cfg -> Logger.debug("telemetry=#{inspect({event, meas, meta})}") end,
   %{}
 )
 ```
