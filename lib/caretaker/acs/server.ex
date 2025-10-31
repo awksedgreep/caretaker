@@ -114,24 +114,32 @@ defmodule Caretaker.ACS.Server do
                       _ -> extract_gpv_params_from_node(body_node)
                     end
 
-                  with :ok <-
-                         Caretaker.TR181.Store.merge_params(
-                           dev_key,
-                           params,
-                           Caretaker.TR181.Schema.default()
-                         ) do
-                    :telemetry.execute([:caretaker, :tr181, :store, :updated], %{}, %{
-                      device: %{oui: oui, product_class: pc, serial: sn}
-                    })
-
-                    conn
-                    |> Plug.Conn.put_resp_header("content-type", "text/plain")
-                    |> Plug.Conn.send_resp(204, "")
-                  else
-                    _ ->
+                  case Process.whereis(Caretaker.TR181.Store) do
+                    nil ->
                       conn
                       |> Plug.Conn.put_resp_header("content-type", "text/plain")
-                      |> Plug.Conn.send_resp(400, "Bad Request")
+                      |> Plug.Conn.send_resp(204, "")
+
+                    _pid ->
+                      with :ok <-
+                             Caretaker.TR181.Store.merge_params(
+                               dev_key,
+                               params,
+                               Caretaker.TR181.Schema.default()
+                             ) do
+                        :telemetry.execute([:caretaker, :tr181, :store, :updated], %{}, %{
+                          device: %{oui: oui, product_class: pc, serial: sn}
+                        })
+
+                        conn
+                        |> Plug.Conn.put_resp_header("content-type", "text/plain")
+                        |> Plug.Conn.send_resp(204, "")
+                      else
+                        _ ->
+                          conn
+                          |> Plug.Conn.put_resp_header("content-type", "text/plain")
+                          |> Plug.Conn.send_resp(400, "Bad Request")
+                      end
                   end
 
                 nil ->

@@ -147,8 +147,6 @@ defmodule Caretaker.TR069.RPC.Inform do
     }
   end
 
-  defp tag(name, value), do: ["<", name, ">", value, "</", name, ">"]
-
   defp to_iso8601(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp to_iso8601(%NaiveDateTime{} = ndt), do: NaiveDateTime.to_iso8601(ndt)
   defp to_iso8601(iso) when is_binary(iso), do: iso

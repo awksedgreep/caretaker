@@ -156,7 +156,7 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
     end
   end
 
-  defp respond_to_rpc(acs_url, rpc, device_id, ns, timeout, id \\ nil)
+  defp respond_to_rpc(acs_url, rpc, device_id, ns, timeout, id)
   defp respond_to_rpc(acs_url, "GetParameterValues", device_id, ns, timeout, id) do
     params = [
       %{
