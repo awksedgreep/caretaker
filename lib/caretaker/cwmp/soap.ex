@@ -63,7 +63,9 @@ defmodule Caretaker.CWMP.SOAP do
       @soapenv,
       "\" xmlns:cwmp=\"",
       cwmp_ns,
-      "\">",
+      "\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"",
+      " xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"",
+      ">",
       "<soapenv:Header>",
       header_xml,
       "</soapenv:Header>",
@@ -122,7 +124,7 @@ defmodule Caretaker.CWMP.SOAP do
               end
           end
 
-        {:ok, %{header: %{id: id_val, cwmp_ns: cwmp_ns}, body: %{rpc: op, xml: rpc_xml}}}
+        {:ok, %{header: %{id: id_val, cwmp_ns: cwmp_ns}, body: %{rpc: op, xml: rpc_xml, node: (rpc_key && (body[rpc_key] || %{})), key: rpc_key}}}
       end
     rescue
       e -> {:error, {:decode_failed, e}}

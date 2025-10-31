@@ -27,16 +27,20 @@ defmodule Caretaker.TR069.RPC.GetParameterNames do
      ]}
   end
 
-  @doc "Decode request body into struct"
+  @doc "Decode request body into struct via Lather"
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
-    import SweetXml
-
     try do
-      doc = SweetXml.parse(xml)
-      path = xpath(doc, ~x"//*[local-name()='ParameterPath']/text()"s) || ""
-      next = (xpath(doc, ~x"//*[local-name()='NextLevel']/text()"s) || "0") in ["1", 1]
-      {:ok, %__MODULE__{parameter_path: path, next_level: next}}
+      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
+      with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
+        root = parsed["root"] || %{}
+        node = root["cwmp:GetParameterNames"] || root["GetParameterNames"] || %{}
+        path = node["ParameterPath"] || ""
+        next_raw = node["NextLevel"] || "0"
+        next = next_raw in ["1", 1, true]
+        {:ok, %__MODULE__{parameter_path: path, next_level: next}}
+      end
     rescue
       e -> {:error, {:decode_failed, e}}
     end

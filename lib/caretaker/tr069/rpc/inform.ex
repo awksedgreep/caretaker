@@ -84,68 +84,65 @@ defmodule Caretaker.TR069.RPC.Inform do
     {:ok, body}
   end
 
-  @doc "Decode from Inform body xml to struct (best-effort, spec-first)"
+  @doc "Decode from Inform body xml to struct via Lather (no SweetXml)"
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
-    import SweetXml
-
     start = System.monotonic_time()
     :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :start], %{}, %{rpc: :inform})
 
     try do
-      doc = SweetXml.parse(xml)
+      # Wrap to stabilize prefixes; tolerate cwmp or no-prefix keys
+      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
 
-      did = %{
-        manufacturer:
-          xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='Manufacturer']/text()"s) ||
-            "",
-        oui: xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='OUI']/text()"s) || "",
-        product_class:
-          xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='ProductClass']/text()"s) ||
-            "",
-        serial_number:
-          xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='SerialNumber']/text()"s) ||
-            ""
-      }
+      with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
+        root = parsed["root"] || %{}
+        node = root["cwmp:Inform"] || root["Inform"] || %{}
 
-      events =
-        xpath(doc, ~x"//*[local-name()='Event']/*/*[local-name()='EventCode']/text()"ls)
-        |> Enum.map(&to_string/1)
+        dev = node["DeviceId"] || %{}
+        did = %{
+          manufacturer: dev["Manufacturer"] || "",
+          oui: dev["OUI"] || "",
+          product_class: dev["ProductClass"] || "",
+          serial_number: dev["SerialNumber"] || ""
+        }
 
-      max_env = (xpath(doc, ~x"//*[local-name()='MaxEnvelopes']/text()"s) || "1") |> to_int(1)
-      retry_count = (xpath(doc, ~x"//*[local-name()='RetryCount']/text()"s) || "0") |> to_int(0)
-      current_time = xpath(doc, ~x"//*[local-name()='CurrentTime']/text()"s) || ""
+        events_list =
+          case node["Event"] || %{} do
+            %{} = ev -> List.wrap(ev["EventStruct"]) |> Enum.map(&event_code/1)
+            other -> List.wrap(other) |> Enum.map(&event_code/1)
+          end
+          |> Enum.reject(&is_nil/1)
 
-      result =
-        {:ok,
-         %__MODULE__{
-           device_id: did,
-           events: events,
-           max_envelopes: max_env,
-           current_time: current_time,
-           retry_count: retry_count,
-           parameter_list: []
-         }}
+        max_env = to_int((node["MaxEnvelopes"] || "1"), 1)
+        retry_count = to_int((node["RetryCount"] || "0"), 0)
+        current_time = node["CurrentTime"] || ""
 
-      duration = System.monotonic_time() - start
+        result =
+          {:ok,
+           %__MODULE__{
+             device_id: did,
+             events: events_list,
+             max_envelopes: max_env,
+             current_time: current_time,
+             retry_count: retry_count,
+             parameter_list: []
+           }}
 
-      :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{
-        rpc: :inform
-      })
-
-      result
+        duration = System.monotonic_time() - start
+        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{rpc: :inform})
+        result
+      end
     rescue
       e ->
         duration = System.monotonic_time() - start
-
-        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{
-          rpc: :inform,
-          error: true
-        })
-
+        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{rpc: :inform, error: true})
         {:error, {:decode_failed, e}}
     end
   end
+
+  defp event_code(%{"EventCode" => v}) when is_binary(v), do: v
+  defp event_code(%{"EventCode" => %{"#text" => v}}), do: v
+  defp event_code(_), do: nil
 
   def to_map(%__MODULE__{} = i) do
     %{

@@ -130,34 +130,23 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
         {:ok, last_rpc}
 
       {:ok, %{status: 200, body: rpc_xml}} ->
-        ns2 =
-          case Regex.run(~r/xmlns:cwmp="([^"]+)"/, rpc_xml) do
-            [_, v] -> v
-            _ -> prev_ns
-          end
+        case SOAP.decode_envelope(rpc_xml) do
+          {:ok, %{header: %{id: id, cwmp_ns: ns2}, body: %{rpc: rpc_name}}} ->
+            :telemetry.execute([:caretaker, :cpe_client, :rpc, :received], %{}, %{
+              acs_url: acs_url,
+              cwmp_ns: ns2 || prev_ns,
+              rpc: rpc_name
+            })
 
-        rpc =
-          case Regex.run(~r/<soap(?:env)?:Body>\s*<(?:(\w+):)?(\w+)/, rpc_xml, capture: :all_but_first) do
-            ["cwmp", name] -> name
-            [_, name] -> name
-            [name] -> name
-            _ -> nil
-          end
+            _ = respond_to_rpc(acs_url, rpc_name, device_id, (ns2 || prev_ns), timeout, id)
+            session_loop(acs_url, (ns2 || prev_ns), device_id, timeout, max_retries, backoff_base, rpc_name)
 
-        id =
-          case Regex.run(~r/<cwmp:ID[^>]*>([^<]+)<\/cwmp:ID>/, rpc_xml) do
-            [_, v] -> v
-            _ -> nil
-          end
+          {:ok, _other} ->
+            {:error, :unexpected_envelope}
 
-        :telemetry.execute([:caretaker, :cpe_client, :rpc, :received], %{}, %{
-          acs_url: acs_url,
-          cwmp_ns: ns2,
-          rpc: rpc
-        })
-
-        _ = respond_to_rpc(acs_url, rpc, device_id, ns2, timeout, id)
-        session_loop(acs_url, ns2, device_id, timeout, max_retries, backoff_base, rpc)
+          {:error, reason} ->
+            {:error, reason}
+        end
 
       {:error, reason} ->
         {:error, reason}
