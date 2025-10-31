@@ -31,15 +31,25 @@ defmodule Caretaker.CWMP.SOAP do
         is_map(body) ->
           {:ok, frag} = Lather.Xml.Builder.build_fragment(body)
           frag
-        is_list(body) or is_binary(body) -> IO.iodata_to_binary(body)
-        true -> ""
+
+        is_list(body) or is_binary(body) ->
+          IO.iodata_to_binary(body)
+
+        true ->
+          ""
       end
 
     header_xml =
       case id do
-        nil -> ""
+        nil ->
+          ""
+
         id ->
-          {:ok, frag} = Lather.Xml.Builder.build_fragment(%{"cwmp:ID" => %{"@mustUnderstand" => "1", "#text" => id}})
+          {:ok, frag} =
+            Lather.Xml.Builder.build_fragment(%{
+              "cwmp:ID" => %{"@mustUnderstand" => "1", "#text" => id}
+            })
+
           frag
       end
 
@@ -49,9 +59,17 @@ defmodule Caretaker.CWMP.SOAP do
 
     xml = [
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-      "<soapenv:Envelope xmlns:soapenv=\"", @soapenv, "\" xmlns:cwmp=\"", cwmp_ns, "\">",
-      "<soapenv:Header>", header_xml, "</soapenv:Header>",
-      "<soapenv:Body>", body_xml, "</soapenv:Body>",
+      "<soapenv:Envelope xmlns:soapenv=\"",
+      @soapenv,
+      "\" xmlns:cwmp=\"",
+      cwmp_ns,
+      "\">",
+      "<soapenv:Header>",
+      header_xml,
+      "</soapenv:Header>",
+      "<soapenv:Body>",
+      body_xml,
+      "</soapenv:Body>",
       "</soapenv:Envelope>"
     ]
 
@@ -67,6 +85,7 @@ defmodule Caretaker.CWMP.SOAP do
         cwmp_ns = env["@xmlns:cwmp"] || @default_cwmp
 
         header = env["soapenv:Header"] || env["soap:Header"] || env["Header"] || %{}
+
         id_val =
           case header["cwmp:ID"] do
             %{"#text" => v} -> v
@@ -75,6 +94,7 @@ defmodule Caretaker.CWMP.SOAP do
           end
 
         body = env["soapenv:Body"] || env["soap:Body"] || env["Body"] || %{}
+
         rpc_key =
           body
           |> Map.keys()
@@ -85,7 +105,10 @@ defmodule Caretaker.CWMP.SOAP do
         # Extract raw RPC xml via regex from original xml to avoid fragment builder issues
         rpc_xml =
           if op do
-            case Regex.run(~r/<soap(?:env)?:Body>\s*(<(\w+):#{op}[\s\S]*?<\/\2:#{op}>)\s*<\/soap(?:env)?:Body>/, xml) do
+            case Regex.run(
+                   ~r/<soap(?:env)?:Body>\s*(<(\w+):#{op}[\s\S]*?<\/\2:#{op}>)\s*<\/soap(?:env)?:Body>/,
+                   xml
+                 ) do
               [_, frag, _prefix] -> frag
               _ -> nil
             end
@@ -107,5 +130,4 @@ defmodule Caretaker.CWMP.SOAP do
   def content_type, do: "text/xml; charset=utf-8"
 
   # -- internal helpers --
-
 end

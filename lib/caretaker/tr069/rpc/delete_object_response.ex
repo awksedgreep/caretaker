@@ -15,6 +15,7 @@ defmodule Caretaker.TR069.RPC.DeleteObjectResponse do
   def decode(xml) when is_binary(xml) do
     try do
       wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
         node = root["cwmp:DeleteObjectResponse"] || root["DeleteObjectResponse"] || %{}

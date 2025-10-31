@@ -4,5 +4,6 @@ defmodule Caretaker.MQTT.Client do
   """
 
   @callback start_link(keyword()) :: GenServer.on_start()
-  @callback publish(client :: pid() | atom(), topic :: String.t(), payload :: iodata()) :: :ok | {:error, term()}
+  @callback publish(client :: pid() | atom(), topic :: String.t(), payload :: iodata()) ::
+              :ok | {:error, term()}
 end

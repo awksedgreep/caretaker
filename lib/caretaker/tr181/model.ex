@@ -13,7 +13,19 @@ defmodule Caretaker.TR181.Model do
   @typedoc "Cast result"
   @type casted :: String.t() | integer() | boolean() | DateTime.t()
 
-  @spec type_for_xsd(String.t()) :: :string | :int | :uint | :bool | :datetime | :long | :ulong | :float | :double | :decimal | :base64 | :unknown
+  @spec type_for_xsd(String.t()) ::
+          :string
+          | :int
+          | :uint
+          | :bool
+          | :datetime
+          | :long
+          | :ulong
+          | :float
+          | :double
+          | :decimal
+          | :base64
+          | :unknown
   def type_for_xsd("xsd:string"), do: :string
   def type_for_xsd("xsd:int"), do: :int
   def type_for_xsd("xsd:unsignedInt"), do: :uint
@@ -88,7 +100,8 @@ defmodule Caretaker.TR181.Model do
   def cast(value, _unknown) when is_binary(value), do: {:ok, value}
 
   @doc "Cast a ParameterValueStruct-like map %{name, value, type}"
-  @spec cast_param(%{name: String.t(), value: String.t(), type: String.t()}) :: {:ok, %{name: String.t(), value: casted(), type: String.t()}} | {:error, term()}
+  @spec cast_param(%{name: String.t(), value: String.t(), type: String.t()}) ::
+          {:ok, %{name: String.t(), value: casted(), type: String.t()}} | {:error, term()}
   def cast_param(%{name: name, value: val, type: type}) do
     case cast(val, type) do
       {:ok, v} -> {:ok, %{name: name, value: v, type: type}}
@@ -115,7 +128,8 @@ defmodule Caretaker.TR181.Model do
   end
 
   @doc "Build nested map from list of %{name, value, type} after casting"
-  @spec normalize_params([%{name: String.t(), value: String.t(), type: String.t()}]) :: {:ok, map()} | {:error, list()}
+  @spec normalize_params([%{name: String.t(), value: String.t(), type: String.t()}]) ::
+          {:ok, map()} | {:error, list()}
   def normalize_params(params) when is_list(params) do
     {errors, casted} =
       params
@@ -155,6 +169,7 @@ defmodule Caretaker.TR181.Model do
   defp flatten_kv(map, prefix \\ "") do
     Enum.flat_map(map, fn {k, v} ->
       path = if prefix == "", do: k, else: prefix <> "." <> k
+
       case v do
         %{} -> flatten_kv(v, path)
         other -> [{path, other}]
@@ -197,9 +212,11 @@ defmodule Caretaker.TR181.Model.Validate do
   defp flatten(map, prefix \\ "") do
     Enum.reduce(map, %{}, fn {k, v}, acc ->
       path = if prefix == "", do: k, else: prefix <> "." <> k
-      case v do
-        %{} -> Map.merge(acc, flatten(v, path))
-        other -> Map.put(acc, path, other)
+      cond do
+        is_map(v) and Map.get(v, :__struct__) == nil ->
+          Map.merge(acc, flatten(v, path))
+        true ->
+          Map.put(acc, path, v)
       end
     end)
   end
@@ -238,21 +255,26 @@ defmodule Caretaker.TR181.Model.Validate do
       {:enum, list} ->
         if is_nil(val) or val in list, do: [], else: [{path, {:enum, list}}]
 
-      _ -> []
+      _ ->
+        []
     end)
   end
 
   defp is_numberish(v), do: is_integer(v) or is_float(v)
   defp value_to_number(v) when is_integer(v) or is_float(v), do: v
+
   defp value_to_number(v) when is_binary(v) do
     case Integer.parse(v) do
-      {i, ""} -> i
-      _ -> case Float.parse(v) do
-        {f, ""} -> f
-        _ -> 0
-      end
+      {i, ""} ->
+        i
+
+      _ ->
+        case Float.parse(v) do
+          {f, ""} -> f
+          _ -> 0
+        end
     end
   end
+
   defp value_to_number(_), do: 0
 end
-

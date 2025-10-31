@@ -13,14 +13,28 @@ defmodule Caretaker.MQTT.BridgeTest do
       send(notify_pid, {:published, topic, IO.iodata_to_binary(payload)})
       :ok
     end
+
     def publish(_client, _topic, _payload), do: :ok
   end
 
   test "bridge publishes Inform from PubSub to MQTT" do
     _ = start_supervised(Caretaker.PubSub)
-    {:ok, pid} = start_supervised({Bridge, client_id: {:fake_client, self()}, client_module: FakeClient, topic: "caretaker/inform"})
 
-    inform = Inform.new(device_id: %{manufacturer: "Acme", oui: "A1B2C3", product_class: "Router", serial_number: "XYZ"})
+    {:ok, pid} =
+      start_supervised(
+        {Bridge,
+         client_id: {:fake_client, self()}, client_module: FakeClient, topic: "caretaker/inform"}
+      )
+
+    inform =
+      Inform.new(
+        device_id: %{
+          manufacturer: "Acme",
+          oui: "A1B2C3",
+          product_class: "Router",
+          serial_number: "XYZ"
+        }
+      )
 
     # Ensure bridge subscribed
     Process.sleep(50)

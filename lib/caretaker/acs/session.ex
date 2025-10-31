@@ -9,7 +9,11 @@ defmodule Caretaker.ACS.Session do
 
   @type command :: iodata()
   @type caller_key :: term()
-  @type device_id :: %{required(:oui) => String.t(), required(:product_class) => String.t(), required(:serial_number) => String.t()}
+  @type device_id :: %{
+          required(:oui) => String.t(),
+          required(:product_class) => String.t(),
+          required(:serial_number) => String.t()
+        }
   @type device_key :: {String.t(), String.t(), String.t()}
 
   def child_spec(opts \\ []) do
@@ -22,7 +26,8 @@ defmodule Caretaker.ACS.Session do
     }
   end
 
-  def start_link(_opts \\ []), do: GenServer.start_link(__MODULE__, %{sessions: %{}, bindings: %{}}, name: __MODULE__)
+  def start_link(_opts \\ []),
+    do: GenServer.start_link(__MODULE__, %{sessions: %{}, bindings: %{}}, name: __MODULE__)
 
   @impl true
   def init(state), do: {:ok, state}
@@ -44,9 +49,10 @@ defmodule Caretaker.ACS.Session do
     GenServer.call(__MODULE__, {:dequeue_for_ip, ip})
   end
 
-# Back-compat generic API (device_key)
+  # Back-compat generic API (device_key)
   @spec upsert(device_key(), device_id(), String.t()) :: :ok
-  def upsert(dev_key, device_id, cwmp_ns), do: GenServer.cast(__MODULE__, {:upsert_dev, dev_key, device_id, cwmp_ns})
+  def upsert(dev_key, device_id, cwmp_ns),
+    do: GenServer.cast(__MODULE__, {:upsert_dev, dev_key, device_id, cwmp_ns})
 
   @spec queue_command(device_key(), command()) :: :ok
   def queue_command(dev_key, cmd), do: GenServer.cast(__MODULE__, {:enqueue_dev, dev_key, cmd})
@@ -62,26 +68,43 @@ defmodule Caretaker.ACS.Session do
   # Server callbacks
 
   @impl true
-  def handle_call({:upsert_from_ip, ip, device_id, cwmp_ns}, _from, %{sessions: sessions, bindings: bindings} = state) do
+  def handle_call(
+        {:upsert_from_ip, ip, device_id, cwmp_ns},
+        _from,
+        %{sessions: sessions, bindings: bindings} = state
+      ) do
     dev_key = device_key(device_id)
     sess = Map.get(sessions, dev_key, %{queue: :queue.new(), device_id: nil, cwmp_ns: nil})
     sess = %{sess | device_id: device_id, cwmp_ns: cwmp_ns}
-    {:reply, :ok, %{state | sessions: Map.put(sessions, dev_key, sess), bindings: Map.put(bindings, {:ip, ip}, dev_key)}}
+
+    {:reply, :ok,
+     %{
+       state
+       | sessions: Map.put(sessions, dev_key, sess),
+         bindings: Map.put(bindings, {:ip, ip}, dev_key)
+     }}
   end
 
   @impl true
   def handle_call({:dequeue_for_ip, ip}, _from, %{sessions: sessions, bindings: bindings} = state) do
     case Map.get(bindings, {:ip, ip}) do
-      nil -> {:reply, :empty, state}
+      nil ->
+        {:reply, :empty, state}
+
       dev_key ->
         case Map.get(sessions, dev_key) do
           %{queue: q} = sess ->
             case :queue.out(q) do
-              {{:value, cmd}, q2} -> {:reply, {:ok, cmd}, %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q2})}}
-              {:empty, _} -> {:reply, :empty, state}
+              {{:value, cmd}, q2} ->
+                {:reply, {:ok, cmd},
+                 %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q2})}}
+
+              {:empty, _} ->
+                {:reply, :empty, state}
             end
 
-          nil -> {:reply, :empty, state}
+          nil ->
+            {:reply, :empty, state}
         end
     end
   end
@@ -91,11 +114,16 @@ defmodule Caretaker.ACS.Session do
     case Map.get(sessions, dev_key) do
       %{queue: q} = sess ->
         case :queue.out(q) do
-          {{:value, cmd}, q2} -> {:reply, {:ok, cmd}, %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q2})}}
-          {:empty, _} -> {:reply, :empty, state}
+          {{:value, cmd}, q2} ->
+            {:reply, {:ok, cmd},
+             %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q2})}}
+
+          {:empty, _} ->
+            {:reply, :empty, state}
         end
 
-      nil -> {:reply, :empty, state}
+      nil ->
+        {:reply, :empty, state}
     end
   end
 
@@ -107,7 +135,9 @@ defmodule Caretaker.ACS.Session do
   @impl true
   def handle_cast({:enqueue_for_ip, ip, cmd}, %{sessions: sessions, bindings: bindings} = state) do
     case Map.get(bindings, {:ip, ip}) do
-      nil -> {:noreply, state}
+      nil ->
+        {:noreply, state}
+
       dev_key ->
         sess = Map.get(sessions, dev_key, %{queue: :queue.new(), device_id: nil, cwmp_ns: nil})
         q = :queue.in(cmd, sess.queue)

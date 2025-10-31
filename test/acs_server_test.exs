@@ -40,7 +40,10 @@ defmodule Caretaker.ACS.ServerTest do
 
   test "unsupported content-type returns 415" do
     try do
-      conn = conn(:post, "/cwmp", "<xml/>") |> Plug.Conn.put_req_header("content-type", "application/json")
+      conn =
+        conn(:post, "/cwmp", "<xml/>")
+        |> Plug.Conn.put_req_header("content-type", "application/json")
+
       conn = Caretaker.ACS.Server.call(conn, Caretaker.ACS.Server.init([]))
       assert conn.status == 415
     catch
@@ -51,7 +54,10 @@ defmodule Caretaker.ACS.ServerTest do
   test "unknown RPC returns 400" do
     _ = start_supervised(Caretaker.PubSub)
     body = "<cwmp:UnknownFoo/>"
-    {:ok, env} = Caretaker.CWMP.SOAP.encode_envelope(body, %{id: "X", cwmp_ns: "urn:dslforum-org:cwmp-1-0"})
+
+    {:ok, env} =
+      Caretaker.CWMP.SOAP.encode_envelope(body, %{id: "X", cwmp_ns: "urn:dslforum-org:cwmp-1-0"})
+
     conn = conn(:post, "/cwmp", IO.iodata_to_binary(env))
     conn = Caretaker.ACS.Server.call(conn, Caretaker.ACS.Server.init([]))
     assert conn.status == 400

@@ -35,7 +35,9 @@ defmodule Caretaker.ACS.TelemetryFlowTest do
     _ = Caretaker.ACS.Server.call(conn1, Caretaker.ACS.Server.init([]))
 
     assert_receive {:evt, [:caretaker, :acs, :inform, :received], %{device_id: _}}, 200
-    assert_receive {:evt, [:caretaker, :acs, :queue, :enqueue], %{rpc: :get_parameter_values}}, 200
+
+    assert_receive {:evt, [:caretaker, :acs, :queue, :enqueue], %{rpc: :get_parameter_values}},
+                   200
 
     # Empty POST should dequeue
     conn2 = conn(:post, "/cwmp", "")

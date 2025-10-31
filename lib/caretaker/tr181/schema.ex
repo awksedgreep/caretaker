@@ -3,7 +3,8 @@ defmodule Caretaker.TR181.Schema do
   Minimal schema for TR-181 parameter types and simple constraints.
   """
 
-  @type rule :: :required | {:type, String.t()} | {:min, number()} | {:max, number()} | {:enum, [any()]}
+  @type rule ::
+          :required | {:type, String.t()} | {:min, number()} | {:max, number()} | {:enum, [any()]}
   @type t :: %{optional(String.t()) => [rule]}
 
   @doc "Example default schema for Device.DeviceInfo.*"

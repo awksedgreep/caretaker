@@ -12,8 +12,12 @@ defmodule Caretaker.CWMP.SOAPTest do
 
     assert xml =~ ~s|<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"|
     assert xml =~ ~s|xmlns:cwmp="urn:dslforum-org:cwmp-1-0"|
-    assert xml =~ ~s|<soapenv:Header><cwmp:ID mustUnderstand="1">abc123</cwmp:ID></soapenv:Header>|
-    assert xml =~ ~s|<soapenv:Body><cwmp:InformResponse><MaxEnvelopes>1</MaxEnvelopes></cwmp:InformResponse></soapenv:Body>|
+
+    assert xml =~
+             ~s|<soapenv:Header><cwmp:ID mustUnderstand="1">abc123</cwmp:ID></soapenv:Header>|
+
+    assert xml =~
+             ~s|<soapenv:Body><cwmp:InformResponse><MaxEnvelopes>1</MaxEnvelopes></cwmp:InformResponse></soapenv:Body>|
   end
 
   test "decode_envelope extracts id, cwmp_ns, and rpc local-name" do
@@ -28,7 +32,9 @@ defmodule Caretaker.CWMP.SOAPTest do
     </soapenv:Envelope>
     """
 
-    assert {:ok, %{header: %{id: "xyz", cwmp_ns: ns}, body: %{rpc: rpc, xml: body_xml}}} = SOAP.decode_envelope(xml)
+    assert {:ok, %{header: %{id: "xyz", cwmp_ns: ns}, body: %{rpc: rpc, xml: body_xml}}} =
+             SOAP.decode_envelope(xml)
+
     assert ns == "urn:dslforum-org:cwmp-1-0"
     assert rpc == "InformResponse"
     assert body_xml =~ "<MaxEnvelopes>2</MaxEnvelopes>"

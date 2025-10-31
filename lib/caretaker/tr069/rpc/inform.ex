@@ -4,7 +4,15 @@ defmodule Caretaker.TR069.RPC.Inform do
   """
 
   @enforce_keys [:device_id, :events, :max_envelopes, :current_time, :retry_count]
-  @derive {Jason.Encoder, only: [:device_id, :events, :max_envelopes, :current_time, :retry_count, :parameter_list]}
+  @derive {Jason.Encoder,
+           only: [
+             :device_id,
+             :events,
+             :max_envelopes,
+             :current_time,
+             :retry_count,
+             :parameter_list
+           ]}
   defstruct [:device_id, :events, :max_envelopes, :current_time, :retry_count, parameter_list: []]
 
   @type device_id :: %{
@@ -44,7 +52,9 @@ defmodule Caretaker.TR069.RPC.Inform do
     did = inform.device_id
 
     events =
-      Enum.map(inform.events, fn e -> ["<EventStruct><EventCode>", e, "</EventCode><CommandKey></CommandKey></EventStruct>"] end)
+      Enum.map(inform.events, fn e ->
+        ["<EventStruct><EventCode>", e, "</EventCode><CommandKey></CommandKey></EventStruct>"]
+      end)
 
     body =
       [
@@ -55,7 +65,9 @@ defmodule Caretaker.TR069.RPC.Inform do
         tag("ProductClass", did.product_class),
         tag("SerialNumber", did.serial_number),
         "</DeviceId>",
-        "<Event>", events, "</Event>",
+        "<Event>",
+        events,
+        "</Event>",
         tag("MaxEnvelopes", Integer.to_string(inform.max_envelopes)),
         tag("CurrentTime", to_iso8601(inform.current_time)),
         tag("RetryCount", Integer.to_string(inform.retry_count)),
@@ -64,7 +76,10 @@ defmodule Caretaker.TR069.RPC.Inform do
       ]
 
     duration = System.monotonic_time() - start
-    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: duration}, %{rpc: :inform})
+
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: duration}, %{
+      rpc: :inform
+    })
 
     {:ok, body}
   end
@@ -81,35 +96,53 @@ defmodule Caretaker.TR069.RPC.Inform do
       doc = SweetXml.parse(xml)
 
       did = %{
-        manufacturer: xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='Manufacturer']/text()"s) || "",
+        manufacturer:
+          xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='Manufacturer']/text()"s) ||
+            "",
         oui: xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='OUI']/text()"s) || "",
-        product_class: xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='ProductClass']/text()"s) || "",
-        serial_number: xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='SerialNumber']/text()"s) || ""
+        product_class:
+          xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='ProductClass']/text()"s) ||
+            "",
+        serial_number:
+          xpath(doc, ~x"//*[local-name()='DeviceId']/*[local-name()='SerialNumber']/text()"s) ||
+            ""
       }
 
-      events = xpath(doc, ~x"//*[local-name()='Event']/*/*[local-name()='EventCode']/text()"ls) |> Enum.map(&to_string/1)
+      events =
+        xpath(doc, ~x"//*[local-name()='Event']/*/*[local-name()='EventCode']/text()"ls)
+        |> Enum.map(&to_string/1)
 
       max_env = (xpath(doc, ~x"//*[local-name()='MaxEnvelopes']/text()"s) || "1") |> to_int(1)
       retry_count = (xpath(doc, ~x"//*[local-name()='RetryCount']/text()"s) || "0") |> to_int(0)
       current_time = xpath(doc, ~x"//*[local-name()='CurrentTime']/text()"s) || ""
 
-      result = {:ok,
-       %__MODULE__{
-         device_id: did,
-         events: events,
-         max_envelopes: max_env,
-         current_time: current_time,
-         retry_count: retry_count,
-         parameter_list: []
-       }}
+      result =
+        {:ok,
+         %__MODULE__{
+           device_id: did,
+           events: events,
+           max_envelopes: max_env,
+           current_time: current_time,
+           retry_count: retry_count,
+           parameter_list: []
+         }}
 
       duration = System.monotonic_time() - start
-      :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{rpc: :inform})
+
+      :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{
+        rpc: :inform
+      })
+
       result
     rescue
       e ->
         duration = System.monotonic_time() - start
-        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{rpc: :inform, error: true})
+
+        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{
+          rpc: :inform,
+          error: true
+        })
+
         {:error, {:decode_failed, e}}
     end
   end
@@ -130,7 +163,6 @@ defmodule Caretaker.TR069.RPC.Inform do
   defp to_iso8601(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp to_iso8601(%NaiveDateTime{} = ndt), do: NaiveDateTime.to_iso8601(ndt)
   defp to_iso8601(iso) when is_binary(iso), do: iso
-
 
   defp to_int(<<>> = _empty, default), do: default
   defp to_int(nil, default), do: default

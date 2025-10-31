@@ -5,10 +5,13 @@ defmodule Caretaker.TR069.RPC.SetParameterValuesTest do
 
   test "encode request with parameters" do
     req =
-      SetParameterValues.new([
-        %{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"},
-        %{name: "Device.DeviceInfo.SerialNumber", value: "XYZ", type: "xsd:string"}
-      ], parameter_key: "k1")
+      SetParameterValues.new(
+        [
+          %{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"},
+          %{name: "Device.DeviceInfo.SerialNumber", value: "XYZ", type: "xsd:string"}
+        ],
+        parameter_key: "k1"
+      )
 
     assert {:ok, body} = SetParameterValues.encode(req)
     xml = IO.iodata_to_binary(body)

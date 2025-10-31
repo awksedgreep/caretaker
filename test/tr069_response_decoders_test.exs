@@ -1,7 +1,13 @@
 defmodule Caretaker.TR069.ResponseDecodersTest do
   use ExUnit.Case, async: true
 
-  alias Caretaker.TR069.RPC.{GetParameterValuesResponse, GetParameterNamesResponse, SetParameterValuesResponse, AddObjectResponse, DeleteObjectResponse}
+  alias Caretaker.TR069.RPC.{
+    GetParameterValuesResponse,
+    GetParameterNamesResponse,
+    SetParameterValuesResponse,
+    AddObjectResponse,
+    DeleteObjectResponse
+  }
 
   test "GetParameterValuesResponse decode" do
     xml = """
@@ -15,7 +21,12 @@ defmodule Caretaker.TR069.ResponseDecodersTest do
     </cwmp:GetParameterValuesResponse>
     """
 
-    assert {:ok, %{parameters: [%{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"}]}} =
+    assert {:ok,
+            %{
+              parameters: [
+                %{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"}
+              ]
+            }} =
              GetParameterValuesResponse.decode(xml)
   end
 
@@ -39,6 +50,7 @@ defmodule Caretaker.TR069.ResponseDecodersTest do
     xml = """
     <cwmp:SetParameterValuesResponse xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\"><Status>0</Status></cwmp:SetParameterValuesResponse>
     """
+
     assert {:ok, %{status: 0}} = SetParameterValuesResponse.decode(xml)
   end
 
@@ -46,6 +58,7 @@ defmodule Caretaker.TR069.ResponseDecodersTest do
     xml = """
     <cwmp:AddObjectResponse xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\"><InstanceNumber>5</InstanceNumber><Status>0</Status></cwmp:AddObjectResponse>
     """
+
     assert {:ok, %{instance_number: 5, status: 0}} = AddObjectResponse.decode(xml)
   end
 
@@ -53,6 +66,7 @@ defmodule Caretaker.TR069.ResponseDecodersTest do
     xml = """
     <cwmp:DeleteObjectResponse xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\"><Status>0</Status></cwmp:DeleteObjectResponse>
     """
+
     assert {:ok, %{status: 0}} = DeleteObjectResponse.decode(xml)
   end
 end

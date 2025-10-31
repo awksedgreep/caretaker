@@ -22,8 +22,14 @@ defmodule Caretaker.TR069.RPC.SetParameterValues do
       Enum.map(params, fn %{name: n, value: v, type: t} ->
         [
           "<ParameterValueStruct>",
-          "<Name>", n, "</Name>",
-          "<Value xsi:type=\"", t, "\">", v, "</Value>",
+          "<Name>",
+          n,
+          "</Name>",
+          "<Value xsi:type=\"",
+          t,
+          "\">",
+          v,
+          "</Value>",
           "</ParameterValueStruct>"
         ]
       end)
@@ -32,10 +38,13 @@ defmodule Caretaker.TR069.RPC.SetParameterValues do
      [
        "<cwmp:SetParameterValues>",
        "<ParameterList xsi:type=\"cwmp:ParameterValueList\" arrayType=\"cwmp:ParameterValueStruct[",
-       Integer.to_string(length(params)), "]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">",
+       Integer.to_string(length(params)),
+       "]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">",
        items,
        "</ParameterList>",
-       "<ParameterKey>", key, "</ParameterKey>",
+       "<ParameterKey>",
+       key,
+       "</ParameterKey>",
        "</cwmp:SetParameterValues>"
      ]}
   end

@@ -32,12 +32,15 @@ defmodule Caretaker.TR181.Store do
               merged = deep_merge(current, nested)
               Map.put(state, key, merged)
             end)
+
             :ok
 
-          {:error, errs} -> {:error, errs}
+          {:error, errs} ->
+            {:error, errs}
         end
 
-      {:error, errs} -> {:error, errs}
+      {:error, errs} ->
+        {:error, errs}
     end
   end
 

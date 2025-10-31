@@ -27,12 +27,19 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
   def decode(xml) when is_binary(xml) do
     try do
       # Ensure xsi/xsd prefixes are tolerated
-      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <> xml <> "</root>"
+      wrapped =
+        "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <>
+          xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
-        node = root["cwmp:GetParameterValuesResponse"] || root["GetParameterValuesResponse"] || %{}
+
+        node =
+          root["cwmp:GetParameterValuesResponse"] || root["GetParameterValuesResponse"] || %{}
+
         plist = node["ParameterList"] || %{}
         pv = plist["ParameterValueStruct"] || []
+
         list =
           pv
           |> List.wrap()

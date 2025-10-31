@@ -44,7 +44,16 @@ defmodule Caretaker.TR181.ModelTest do
     }
 
     list = Model.to_parameter_values(nested)
-    assert Enum.any?(list, &(&1.name == "Device.DeviceInfo.Manufacturer" and &1.value == "Acme" and &1.type == "xsd:string"))
-    assert Enum.any?(list, &(&1.name == "Device.DeviceInfo.UpTime" and &1.value == "15" and &1.type == "xsd:int"))
+
+    assert Enum.any?(
+             list,
+             &(&1.name == "Device.DeviceInfo.Manufacturer" and &1.value == "Acme" and
+                 &1.type == "xsd:string")
+           )
+
+    assert Enum.any?(
+             list,
+             &(&1.name == "Device.DeviceInfo.UpTime" and &1.value == "15" and &1.type == "xsd:int")
+           )
   end
 end

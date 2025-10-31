@@ -26,15 +26,19 @@ defmodule Caretaker.TR069.RPC.Fault do
             # Try SOAP Fault (fallback with XPath then regex)
             xcode = xpath(doc, ~x"//*[local-name()='faultcode']/text()"s)
             xstr = xpath(doc, ~x"//*[local-name()='faultstring']/text()"s)
+
             cond do
-              xcode && xstr -> {xcode, xstr}
+              xcode && xstr ->
+                {xcode, xstr}
+
               true ->
                 rc = with [_, c] <- Regex.run(~r/<faultcode>([^<]+)<\/faultcode>/, xml), do: c
                 rs = with [_, s] <- Regex.run(~r/<faultstring>([^<]+)<\/faultstring>/, xml), do: s
                 {rc, rs}
             end
 
-          other -> other
+          other ->
+            other
         end
 
       code = code || ""

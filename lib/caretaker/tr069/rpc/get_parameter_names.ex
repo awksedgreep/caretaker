@@ -17,8 +17,12 @@ defmodule Caretaker.TR069.RPC.GetParameterNames do
     {:ok,
      [
        "<cwmp:GetParameterNames>",
-       "<ParameterPath>", path, "</ParameterPath>",
-       "<NextLevel>", (if next, do: "1", else: "0"), "</NextLevel>",
+       "<ParameterPath>",
+       path,
+       "</ParameterPath>",
+       "<NextLevel>",
+       if(next, do: "1", else: "0"),
+       "</NextLevel>",
        "</cwmp:GetParameterNames>"
      ]}
   end

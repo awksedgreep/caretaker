@@ -20,7 +20,8 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
       [
         "<cwmp:GetParameterValues>",
         "<ParameterNames xsi:type=\"cwmp:ParameterNames\" arrayType=\"xsd:string[",
-        Integer.to_string(length(names)), "]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">",
+        Integer.to_string(length(names)),
+        "]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">",
         items,
         "</ParameterNames>",
         "</cwmp:GetParameterValues>"

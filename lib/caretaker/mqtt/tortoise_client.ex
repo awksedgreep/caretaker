@@ -20,6 +20,7 @@ defmodule Caretaker.MQTT.TortoiseClient do
   @impl true
   def publish(client_id, topic, payload) do
     bin = IO.iodata_to_binary(payload)
+
     case Tortoise311.publish(client_id, topic, bin, qos: 0) do
       :ok -> :ok
       {:error, _} = err -> err

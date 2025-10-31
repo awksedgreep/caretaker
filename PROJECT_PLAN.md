@@ -112,6 +112,14 @@ Acceptance
 Goals
 - Core parameter model primitives and constraints.
 - Mapping between TR-069 ParameterValueStruct and TR-181 params.
+
+Status (completed)
+- DONE: TR-181 Model helpers (types/cast, path normalization, round-trip)
+- DONE: Validation rules and tests (required, type, min/max, enum)
+- DONE: TR-181 Store merge/deep-merge tests
+- DONE: ACS integration test mapping GetParameterValuesResponse -> TR-181 Store
+- DONE: Fixture for GetParameterValuesResponse
+
 Tasks
 - Caretaker.TR181.Model: types, validation helpers, normalization.
 - Mappers between TR-069 RPC payloads and TR-181 structures.

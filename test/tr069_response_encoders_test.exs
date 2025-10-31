@@ -1,10 +1,19 @@
 defmodule Caretaker.TR069.ResponseEncodersTest do
   use ExUnit.Case, async: true
 
-  alias Caretaker.TR069.RPC.{GetParameterValuesResponse, GetParameterNamesResponse, SetParameterValuesResponse, AddObjectResponse, DeleteObjectResponse}
+  alias Caretaker.TR069.RPC.{
+    GetParameterValuesResponse,
+    GetParameterNamesResponse,
+    SetParameterValuesResponse,
+    AddObjectResponse,
+    DeleteObjectResponse
+  }
 
   test "encode/decode GetParameterValuesResponse" do
-    data = %{parameters: [%{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"}]}
+    data = %{
+      parameters: [%{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"}]
+    }
+
     assert {:ok, xml} = GetParameterValuesResponse.encode(data)
     assert xml =~ "<cwmp:GetParameterValuesResponse>"
     assert {:ok, ^data} = GetParameterValuesResponse.decode(xml)

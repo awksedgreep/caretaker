@@ -22,7 +22,8 @@ defmodule Caretaker.MQTT.Bridge do
     }
   end
 
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
+  def start_link(opts),
+    do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
 
   @impl true
   def init(opts) do
@@ -37,7 +38,10 @@ defmodule Caretaker.MQTT.Bridge do
   end
 
   @impl true
-  def handle_info({:pubsub, :tr069_inform, %Caretaker.TR069.RPC.Inform{} = inform}, %{topic: mqtt_topic} = state) do
+  def handle_info(
+        {:pubsub, :tr069_inform, %Caretaker.TR069.RPC.Inform{} = inform},
+        %{topic: mqtt_topic} = state
+      ) do
     payload = Jason.encode!(Caretaker.TR069.RPC.Inform.to_map(inform))
     :ok = state.client_mod.publish(state.client_id, mqtt_topic, payload)
     {:noreply, state}

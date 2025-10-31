@@ -20,12 +20,17 @@ defmodule Caretaker.ACS.TR181IntegrationTest do
     assert conn1.status == 200
 
     # 2) Device posts GetParameterValuesResponse
-    gpv_resp = %{parameters: [
-      %{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"},
-      %{name: "Device.DeviceInfo.SerialNumber", value: "XYZ123", type: "xsd:string"}
-    ]}
+    gpv_resp = %{
+      parameters: [
+        %{name: "Device.DeviceInfo.Manufacturer", value: "Acme", type: "xsd:string"},
+        %{name: "Device.DeviceInfo.SerialNumber", value: "XYZ123", type: "xsd:string"}
+      ]
+    }
+
     {:ok, body} = GetParameterValuesResponse.encode(gpv_resp)
-    {:ok, envelope} = SOAP.encode_envelope(body, %{id: "ID123", cwmp_ns: "urn:dslforum-org:cwmp-1-0"})
+
+    {:ok, envelope} =
+      SOAP.encode_envelope(body, %{id: "ID123", cwmp_ns: "urn:dslforum-org:cwmp-1-0"})
 
     conn2 = conn(:post, "/cwmp", IO.iodata_to_binary(envelope))
     conn2 = Caretaker.ACS.Server.call(conn2, Caretaker.ACS.Server.init([]))

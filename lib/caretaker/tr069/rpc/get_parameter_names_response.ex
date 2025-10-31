@@ -8,12 +8,18 @@ defmodule Caretaker.TR069.RPC.GetParameterNamesResponse do
 
   @spec encode(t()) :: {:ok, iodata()} | {:error, term()}
   def encode(%{parameters: params}) do
-    _infos = Enum.map(params, fn %{name: n, writable: w} -> %{"ParameterInfoStruct" => %{"Name" => n, "Writable" => if(w, do: "1", else: "0")}} end)
+    _infos =
+      Enum.map(params, fn %{name: n, writable: w} ->
+        %{"ParameterInfoStruct" => %{"Name" => n, "Writable" => if(w, do: "1", else: "0")}}
+      end)
 
     map = %{
       "cwmp:GetParameterNamesResponse" => %{
         "ParameterList" => %{
-          "ParameterInfoStruct" => Enum.map(params, fn %{name: n, writable: w} -> %{"Name" => n, "Writable" => if(w, do: "1", else: "0")} end)
+          "ParameterInfoStruct" =>
+            Enum.map(params, fn %{name: n, writable: w} ->
+              %{"Name" => n, "Writable" => if(w, do: "1", else: "0")}
+            end)
         }
       }
     }
@@ -25,6 +31,7 @@ defmodule Caretaker.TR069.RPC.GetParameterNamesResponse do
   def decode(xml) when is_binary(xml) do
     try do
       wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
         node = root["cwmp:GetParameterNamesResponse"] || root["GetParameterNamesResponse"] || %{}

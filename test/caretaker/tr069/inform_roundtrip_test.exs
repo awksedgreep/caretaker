@@ -10,7 +10,9 @@ defmodule Caretaker.TR069.InformRoundtripTest do
   test "decode Inform, publish to PubSub, and respond with InformResponse" do
     xml = File.read!(Path.join(@fixtures, "inform.xml"))
 
-    assert {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "Inform", xml: body_xml}}} = SOAP.decode_envelope(xml)
+    assert {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "Inform", xml: body_xml}}} =
+             SOAP.decode_envelope(xml)
+
     assert id == "ID123"
     assert ns == "urn:dslforum-org:cwmp-1-0"
 
