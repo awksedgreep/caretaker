@@ -1,0 +1,1 @@
+Place sample SOAP Inform and InformResponse envelopes here for integration tests.
