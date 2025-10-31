@@ -20,7 +20,7 @@ A multi-phase plan to deliver an Elixir TR-069/TR-181 toolkit using Lather (SOAP
 ## Telemetry
 - Library prefix: [:caretaker, ...]
 - ACS: [:caretaker, :acs, :request, :start|:stop]
-- TR-069 RPC encode/decode (planned):
+- TR-069 RPC encode/decode spans: implemented in core paths, expanding across newly added RPCs
   - [:caretaker, :tr069, :rpc, :encode, :start|:stop], meta: %{rpc: atom(), id: String.t()}
   - [:caretaker, :tr069, :rpc, :decode, :start|:stop], meta: %{rpc: atom(), id: String.t()}
 
@@ -40,13 +40,14 @@ Goals
 - Introduce RPC registry and type validations.
 - Emit TR-069 encode/decode telemetry; add fixtures and round-trip tests.
 
-Status (in progress)
+Status (completed)
 - DONE: Spec-driven SOAP 1.1 helpers (encode_envelope/2, decode_envelope/1)
 - DONE: Inform and InformResponse structs with encode/1 and decode/1
 - DONE: RPC registry (Inform, InformResponse)
 - DONE: Fixtures and round-trip test (Inform -> InformResponse)
 - DONE: Internal PubSub topic for Inform and MQTT bridge publisher
-- PENDING: Replace regex-based parsing with full Lather builders/parsers and add TR-069 telemetry spans
+- DONE: Replaced regex/SweetXml parsing in core paths with Lather builders/parsers (ACS.Server/CPE.Client/Inform/GPN/Fault)
+- IN PROGRESS: Expand TR-069 telemetry spans across all RPC encode/decode paths
 
 Tasks
 - Caretaker.CWMP.SOAP: encode_envelope/2, decode_envelope/1 (swap to Lather when ready).
@@ -71,11 +72,11 @@ Status (completed minimal scope)
 - DONE: ACS.Session global FIFO queue; empty POST returns next queued command or 204
 - DONE: Queue GetParameterValues("Device.DeviceInfo.") after Inform
 - DONE: Integration tests for Inform -> InformResponse and empty POST flow
-- DONE: Robust SOAP decode using SweetXml (local-name() for RPC, cwmp:ID; graceful errors)
+- DONE: Robust SOAP decode via Lather; graceful error handling
 - DONE: Error handling paths (400 on malformed/unknown RPC) with tests
 - DONE: Telemetry around Inform encode/decode and ACS queue/inform events
 - DONE: 415 on unsupported content-type
-- PENDING: Per-device sessions keyed by DeviceId; swap regex remnants and SweetXml with Lather builders/parsers for full spec conformance; additional telemetry spans
+- PENDING: Per-device sessions keyed by DeviceId; broaden telemetry spans
 
 Tasks
 - Expand Caretaker.ACS.Server: body parsing, content-type, error handling, ID correlation.
@@ -93,8 +94,9 @@ Goals
 - Implement GetParameterNames, GetParameterValues, SetParameterValues, AddObject, DeleteObject.
 - Fault handling end-to-end.
 
-Status (completed)
+Status (completed and expanded)
 - DONE: Lather-based encoders/decoders for GetParameterNames(+Response), GetParameterValues(+Response), SetParameterValues(+Response), AddObject(+Response), DeleteObject(+Response)
+- DONE: Added codecs + tests: Download(+Response), Upload(+Response), TransferComplete(+Response), AutonomousTransferComplete(+Response), Reboot(+Response), FactoryReset(+Response), GetRPCMethods(+Response), GetParameterAttributes(+Response), SetParameterAttributes(+Response), ScheduleInform(+Response), ScheduleDownload(+Response), GetQueuedTransfers(+Response), CancelTransfer(+Response), RequestDownload(+Response)
 - DONE: Fault decoder for cwmp and SOAP Faults
 - DONE: Registry entries + fixtures and round-trip tests
 
@@ -109,6 +111,9 @@ Acceptance
 - Unit/integration tests pass; fault scenarios covered.
 
 ## Phase 4 — TR-181 Model
+
+Diagnostics helpers (added)
+- Added helpers to build SetParameterValues for TR-181 diagnostics: Ping, TraceRoute, NSLookup (Requested state)
 Goals
 - Core parameter model primitives and constraints.
 - Mapping between TR-069 ParameterValueStruct and TR-181 params.
@@ -202,6 +207,7 @@ Acceptance
 - v0.1.0: Phases 0–2 (scaffold, Inform/InformResponse, minimal ACS).
 - v0.2.x: Phase 3 (additional RPCs) + part of Phase 4.
 - v0.3.x: Phase 4 completion + Phase 5 (client).
+- v0.4.x: Expanded RPC set (firmware, attributes, scheduling, transfer ops), diagnostics helpers, header compliance tests.
 
 ## Release checklist
 - All tests green; dialyzer (optional) clean; formatted.
