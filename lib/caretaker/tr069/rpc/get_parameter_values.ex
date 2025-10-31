@@ -11,27 +11,22 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
   @spec new([String.t()]) :: t()
   def new(names), do: %__MODULE__{names: names}
 
-  @doc "Encode body element (without SOAP Envelope)"
+  @doc "Encode body element (without SOAP Envelope) via Lather"
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{names: names}) do
     start = System.monotonic_time()
     :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :start], %{}, %{rpc: :get_parameter_values})
 
-    items = for n <- names, do: ["<string>", n, "</string>"]
+    pn = %{
+      "@xsi:type" => "cwmp:ParameterNames",
+      "@arrayType" => "xsd:string[#{length(names)}]",
+      "string" => Enum.map(names, fn n -> %{"string" => n} end)
+    }
 
-    body =
-      [
-        "<cwmp:GetParameterValues>",
-        "<ParameterNames xsi:type=\"cwmp:ParameterNames\" arrayType=\"xsd:string[",
-        Integer.to_string(length(names)),
-        "]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">",
-        items,
-        "</ParameterNames>",
-        "</cwmp:GetParameterValues>"
-      ]
+    map = %{"cwmp:GetParameterValues" => %{"ParameterNames" => pn}}
 
+    res = Lather.Xml.Builder.build_fragment(map)
     :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: System.monotonic_time() - start}, %{rpc: :get_parameter_values})
-
-    {:ok, body}
+    res
   end
 end

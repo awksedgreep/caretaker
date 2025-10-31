@@ -43,7 +43,7 @@ defmodule Caretaker.TR069.RPC.Inform do
     }
   end
 
-  @doc "Encode to SOAP body structure (without Envelope)"
+  @doc "Encode to SOAP body structure (without Envelope) via Lather"
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{} = inform) do
     start = System.monotonic_time()
@@ -51,37 +51,29 @@ defmodule Caretaker.TR069.RPC.Inform do
 
     did = inform.device_id
 
-    events =
-      Enum.map(inform.events, fn e ->
-        ["<EventStruct><EventCode>", e, "</EventCode><CommandKey></CommandKey></EventStruct>"]
-      end)
+    event_list = Enum.map(inform.events, fn e -> %{"EventStruct" => %{"EventCode" => e, "CommandKey" => ""}} end)
 
-    body =
-      [
-        "<cwmp:Inform>",
-        "<DeviceId>",
-        tag("Manufacturer", did.manufacturer),
-        tag("OUI", did.oui),
-        tag("ProductClass", did.product_class),
-        tag("SerialNumber", did.serial_number),
-        "</DeviceId>",
-        "<Event>",
-        events,
-        "</Event>",
-        tag("MaxEnvelopes", Integer.to_string(inform.max_envelopes)),
-        tag("CurrentTime", to_iso8601(inform.current_time)),
-        tag("RetryCount", Integer.to_string(inform.retry_count)),
-        "<ParameterList xsi:type=\"cwmp:ParameterValueList\" arrayType=\"xsd:anyType[]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"></ParameterList>",
-        "</cwmp:Inform>"
-      ]
+    map = %{
+      "cwmp:Inform" => %{
+        "DeviceId" => %{
+          "Manufacturer" => did.manufacturer,
+          "OUI" => did.oui,
+          "ProductClass" => did.product_class,
+          "SerialNumber" => did.serial_number
+        },
+        "Event" => event_list,
+        "MaxEnvelopes" => Integer.to_string(inform.max_envelopes),
+        "CurrentTime" => to_iso8601(inform.current_time),
+        "RetryCount" => Integer.to_string(inform.retry_count),
+        "ParameterList" => %{}
+      }
+    }
+
+    res = Lather.Xml.Builder.build_fragment(map)
 
     duration = System.monotonic_time() - start
-
-    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: duration}, %{
-      rpc: :inform
-    })
-
-    {:ok, body}
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: duration}, %{rpc: :inform})
+    res
   end
 
   @doc "Decode from Inform body xml to struct via Lather (no SweetXml)"

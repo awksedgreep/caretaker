@@ -11,20 +11,17 @@ defmodule Caretaker.TR069.RPC.GetParameterNames do
   @spec new(String.t(), boolean()) :: t()
   def new(path, next_level), do: %__MODULE__{parameter_path: path, next_level: next_level}
 
-  @doc "Encode body element (without SOAP Envelope)"
+  @doc "Encode body element (without SOAP Envelope) via Lather"
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{parameter_path: path, next_level: next}) do
-    {:ok,
-     [
-       "<cwmp:GetParameterNames>",
-       "<ParameterPath>",
-       path,
-       "</ParameterPath>",
-       "<NextLevel>",
-       if(next, do: "1", else: "0"),
-       "</NextLevel>",
-       "</cwmp:GetParameterNames>"
-     ]}
+    map = %{
+      "cwmp:GetParameterNames" => %{
+        "ParameterPath" => path,
+        "NextLevel" => if(next, do: "1", else: "0")
+      }
+    }
+
+    Lather.Xml.Builder.build_fragment(map)
   end
 
   @doc "Decode request body into struct via Lather"
