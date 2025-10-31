@@ -35,4 +35,22 @@ defmodule Caretaker.TR181.ModelValidateTest do
     assert {"Device.DeviceInfo.UpTime", {:min, 0}} in errs
     assert {"Device.DeviceInfo.Mode", {:enum, ["A", "B", "C"]}} in errs
   end
+
+  test "flatten treats structs as terminal values (e.g., DateTime)" do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    schema = %{
+      "Device.DeviceInfo.CurrentLocalTime" => [{:type, "xsd:dateTime"}]
+    }
+
+    nested = %{
+      "Device" => %{
+        "DeviceInfo" => %{
+          "CurrentLocalTime" => now
+        }
+      }
+    }
+
+    assert :ok == Validate.validate(nested, schema)
+  end
 end
