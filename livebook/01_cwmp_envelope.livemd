@@ -1,0 +1,56 @@
+# CWMP Envelope: Encode and Decode with Caretaker
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CWMP.SOAP
+require Logger
+```
+
+## Encode an InformResponse body and wrap in SOAP 1.1
+
+```elixir
+{:ok, body} =
+  Caretaker.TR069.RPC.InformResponse.encode(
+    %Caretaker.TR069.RPC.InformResponse{max_envelopes: 1}
+  )
+
+{:ok, env} =
+  SOAP.encode_envelope(body, %{id: "abc123", cwmp_ns: "urn:dslforum-org:cwmp-1-0"})
+
+tests = %{
+  envelope: String.contains?(env, "soapenv:Envelope"),
+  cwmp_ns: String.contains?(env, "xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\""),
+  id_echo: String.contains?(env, "<cwmp:ID mustUnderstand=\"1\">abc123</cwmp:ID>")
+}
+
+Logger.info("Envelope checks=#{inspect(tests)}")
+IO.iodata_to_binary(env)
+```
+
+## Decode the envelope
+
+```elixir
+{:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: rpc, xml: rpc_xml}}} =
+  SOAP.decode_envelope(env)
+
+validations = %{
+  id_ok: id == "abc123",
+  ns_ok: ns == "urn:dslforum-org:cwmp-1-0",
+  rpc_ok: rpc == "InformResponse",
+  rpc_xml_present: is_binary(rpc_xml) and byte_size(rpc_xml) > 0
+}
+
+Logger.info("Decode validations=#{inspect(validations)}")
+{id, ns, rpc}
+```
+
+## Content-Type helper
+
+```elixir
+SOAP.content_type()
+```

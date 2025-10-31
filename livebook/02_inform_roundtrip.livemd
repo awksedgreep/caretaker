@@ -1,0 +1,45 @@
+# Inform Roundtrip: Fixture -> Inform -> InformResponse
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CWMP.SOAP
+require Logger
+```
+
+## Load fixture Inform and decode
+
+```elixir
+xml = File.read!("test/fixtures/tr069/inform.xml")
+
+{:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "Inform", xml: body_xml}}} =
+  SOAP.decode_envelope(xml)
+
+{:ok, inform} = Caretaker.TR069.RPC.Inform.decode(body_xml)
+Logger.info("Inform device_id=#{inspect(inform.device_id)} id=#{id} cwmp_ns=#{ns}")
+```
+
+## Build InformResponse, mirror namespace, echo cwmp:ID
+
+```elixir
+{:ok, resp_body} =
+  Caretaker.TR069.RPC.InformResponse.encode(
+    %Caretaker.TR069.RPC.InformResponse{max_envelopes: 1}
+  )
+
+{:ok, resp_env} = SOAP.encode_envelope(resp_body, %{id: id, cwmp_ns: ns})
+
+tokens_ok = %{
+  has_inform_response: String.contains?(resp_env, "<cwmp:InformResponse"),
+  has_max: String.contains?(resp_env, "<MaxEnvelopes>1</MaxEnvelopes>"),
+  id_echo: String.contains?(resp_env, "<cwmp:ID mustUnderstand=\"1\">#{id}</cwmp:ID>"),
+  ns_mirrored: String.contains?(resp_env, "xmlns:cwmp=\"#{ns}\"")
+}
+
+Logger.info("Response envelope tokens_ok=#{inspect(tokens_ok)}")
+IO.iodata_to_binary(resp_env)
+```

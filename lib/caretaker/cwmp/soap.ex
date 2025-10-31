@@ -81,10 +81,15 @@ defmodule Caretaker.CWMP.SOAP do
   def decode_envelope(xml) when is_binary(xml) do
     try do
       with {:ok, parsed} <- Lather.Xml.Parser.parse(xml) do
-        env = parsed["soapenv:Envelope"] || parsed["soap:Envelope"] || parsed["Envelope"] || %{}
+        env =
+          parsed["soapenv:Envelope"] || parsed["SOAP-ENV:Envelope"] || parsed["s:Envelope"] ||
+            parsed["soap:Envelope"] || parsed["Envelope"] || %{}
+
         cwmp_ns = env["@xmlns:cwmp"] || @default_cwmp
 
-        header = env["soapenv:Header"] || env["soap:Header"] || env["Header"] || %{}
+        header =
+          env["soapenv:Header"] || env["SOAP-ENV:Header"] || env["s:Header"] || env["soap:Header"] ||
+            env["Header"] || %{}
 
         id_val =
           case header["cwmp:ID"] do
@@ -93,7 +98,9 @@ defmodule Caretaker.CWMP.SOAP do
             _ -> nil
           end
 
-        body = env["soapenv:Body"] || env["soap:Body"] || env["Body"] || %{}
+        body =
+          env["soapenv:Body"] || env["SOAP-ENV:Body"] || env["s:Body"] || env["soap:Body"] ||
+            env["Body"] || %{}
 
         rpc_key =
           body
@@ -102,18 +109,17 @@ defmodule Caretaker.CWMP.SOAP do
 
         op = rpc_key && String.split(rpc_key, ":") |> List.last()
 
-        # Extract raw RPC xml via regex from original xml to avoid fragment builder issues
+        # Rebuild RPC fragment using Lather builder to avoid regex fragility
         rpc_xml =
-          if op do
-            case Regex.run(
-                   ~r/<soap(?:env)?:Body>\s*(<(\w+):#{op}[\s\S]*?<\/\2:#{op}>)\s*<\/soap(?:env)?:Body>/,
-                   xml
-                 ) do
-              [_, frag, _prefix] -> frag
-              _ -> nil
-            end
-          else
-            nil
+          case rpc_key do
+            nil -> nil
+            key ->
+              node = body[key] || %{}
+
+              case Lather.Xml.Builder.build_fragment(%{key => node}) do
+                {:ok, frag} -> frag
+                _ -> nil
+              end
           end
 
         {:ok, %{header: %{id: id_val, cwmp_ns: cwmp_ns}, body: %{rpc: op, xml: rpc_xml}}}

@@ -14,6 +14,9 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
   @doc "Encode body element (without SOAP Envelope)"
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{names: names}) do
+    start = System.monotonic_time()
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :start], %{}, %{rpc: :get_parameter_values})
+
     items = for n <- names, do: ["<string>", n, "</string>"]
 
     body =
@@ -26,6 +29,8 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
         "</ParameterNames>",
         "</cwmp:GetParameterValues>"
       ]
+
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: System.monotonic_time() - start}, %{rpc: :get_parameter_values})
 
     {:ok, body}
   end

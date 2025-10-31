@@ -1,0 +1,50 @@
+# CPE Client Session (optional networked demo)
+
+> This notebook starts a local HTTP listener (Bandit) and performs a one-shot TR-069 session.
+
+## Setup and start ACS + Finch
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+require Logger
+
+{:ok, sup} =
+  Supervisor.start_link(
+    [
+      {Bandit, plug: Caretaker.ACS.Server, port: 4051},
+      {Finch, name: Caretaker.Finch},
+      {Caretaker.ACS.Session, []}
+    ],
+    strategy: :one_for_one
+  )
+```
+
+## Run one-shot session
+
+```elixir
+{:ok, result} =
+  Caretaker.CPE.Client.run_session(
+    "http://localhost:4051/cwmp",
+    device_id: %{
+      manufacturer: "Acme",
+      oui: "A1B2C3",
+      product_class: "Router",
+      serial_number: "XYZ123"
+    },
+    max_retries: 2,
+    timeout: 3000
+  )
+
+Logger.info("Session result=#{inspect(result)}")
+result
+```
+
+## Teardown (optional)
+
+```elixir
+Process.exit(sup, :normal)
+:ok
+```

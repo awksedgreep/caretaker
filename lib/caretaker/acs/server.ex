@@ -47,7 +47,13 @@ defmodule Caretaker.ACS.Server do
           case Caretaker.ACS.Session.next_for_ip(conn.remote_ip || {127, 0, 0, 1}) do
             {:ok, cmd_body} ->
               _ = :telemetry.execute([:caretaker, :acs, :queue, :dequeue], %{}, %{rpc: :next})
-              {:ok, envelope} = Caretaker.CWMP.SOAP.encode_envelope(cmd_body, %{})
+
+              ns =
+                Caretaker.ACS.Session.cwmp_ns_for_ip(conn.remote_ip || {127, 0, 0, 1}) ||
+                  Caretaker.CWMP.SOAP.content_type() && "urn:dslforum-org:cwmp-1-0"
+
+              id = Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
+              {:ok, envelope} = Caretaker.CWMP.SOAP.encode_envelope(cmd_body, %{id: id, cwmp_ns: ns})
 
               conn
               |> Plug.Conn.put_resp_header("content-type", Caretaker.CWMP.SOAP.content_type())

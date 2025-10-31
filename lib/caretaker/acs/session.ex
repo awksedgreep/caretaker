@@ -65,6 +65,11 @@ defmodule Caretaker.ACS.Session do
     GenServer.call(__MODULE__, {:device_key_for_ip, ip})
   end
 
+  @spec cwmp_ns_for_ip(:inet.ip_address()) :: String.t() | nil
+  def cwmp_ns_for_ip(ip) do
+    GenServer.call(__MODULE__, {:cwmp_ns_for_ip, ip})
+  end
+
   # Server callbacks
 
   @impl true
@@ -130,6 +135,18 @@ defmodule Caretaker.ACS.Session do
   @impl true
   def handle_call({:device_key_for_ip, ip}, _from, %{bindings: bindings} = state) do
     {:reply, Map.get(bindings, {:ip, ip}), state}
+  end
+
+  @impl true
+  def handle_call({:cwmp_ns_for_ip, ip}, _from, %{bindings: bindings, sessions: sessions} = state) do
+    case Map.get(bindings, {:ip, ip}) do
+      nil -> {:reply, nil, state}
+      dev_key ->
+        case Map.get(sessions, dev_key) do
+          %{cwmp_ns: ns} -> {:reply, ns, state}
+          _ -> {:reply, nil, state}
+        end
+    end
   end
 
   @impl true

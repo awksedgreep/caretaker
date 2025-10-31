@@ -115,7 +115,7 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-  defp session_loop(acs_url, ns, device_id, timeout, max_retries, backoff_base, last_rpc \\ nil) do
+defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_base, last_rpc \\ nil) do
     empty_res =
       http_retry(
         fn ->
@@ -133,16 +133,20 @@ defmodule Caretaker.CPE.Client do
         ns2 =
           case Regex.run(~r/xmlns:cwmp="([^"]+)"/, rpc_xml) do
             [_, v] -> v
-            _ -> ns
+            _ -> prev_ns
           end
 
         rpc =
-          case Regex.run(~r/<soap(?:env)?:Body>\s*<(?:(\w+):)?(\w+)/, rpc_xml,
-                 capture: :all_but_first
-               ) do
+          case Regex.run(~r/<soap(?:env)?:Body>\s*<(?:(\w+):)?(\w+)/, rpc_xml, capture: :all_but_first) do
             ["cwmp", name] -> name
             [_, name] -> name
             [name] -> name
+            _ -> nil
+          end
+
+        id =
+          case Regex.run(~r/<cwmp:ID[^>]*>([^<]+)<\/cwmp:ID>/, rpc_xml) do
+            [_, v] -> v
             _ -> nil
           end
 
@@ -152,7 +156,7 @@ defmodule Caretaker.CPE.Client do
           rpc: rpc
         })
 
-        _ = respond_to_rpc(acs_url, rpc, device_id, ns2, timeout)
+        _ = respond_to_rpc(acs_url, rpc, device_id, ns2, timeout, id)
         session_loop(acs_url, ns2, device_id, timeout, max_retries, backoff_base, rpc)
 
       {:error, reason} ->
@@ -163,7 +167,8 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-  defp respond_to_rpc(acs_url, "GetParameterValues", device_id, ns, timeout) do
+  defp respond_to_rpc(acs_url, rpc, device_id, ns, timeout, id \\ nil)
+  defp respond_to_rpc(acs_url, "GetParameterValues", device_id, ns, timeout, id) do
     params = [
       %{
         name: "Device.DeviceInfo.Manufacturer",
@@ -179,7 +184,7 @@ defmodule Caretaker.CPE.Client do
 
     with {:ok, body} <-
            Caretaker.TR069.RPC.GetParameterValuesResponse.encode(%{parameters: params}),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns}),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
          {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
       :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
         acs_url: acs_url,
@@ -195,7 +200,25 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-  defp respond_to_rpc(_acs_url, rpc, _device_id, _ns, _timeout) when is_binary(rpc) do
+  defp respond_to_rpc(acs_url, "SetParameterValues", _device_id, ns, timeout, id) do
+    with {:ok, body} <- Caretaker.TR069.RPC.SetParameterValuesResponse.encode(%{status: 0}),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "SetParameterValues"
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(_acs_url, rpc, _device_id, _ns, _timeout, _id) when is_binary(rpc) do
     :telemetry.execute([:caretaker, :cpe_client, :rpc, :unsupported], %{}, %{rpc: rpc})
     :ok
   end

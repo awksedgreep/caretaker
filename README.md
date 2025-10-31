@@ -47,6 +47,45 @@ Caretaker emits:
 
 Additional TR-069 encode/decode events will be added.
 
+## Supported RPCs
+
+Implemented encoders/decoders (spec-driven):
+- Inform (encode/decode)
+- InformResponse (encode/decode)
+- GetParameterNames (+Response) (encode/decode)
+- GetParameterValues (+Response) (encode/decode)
+- SetParameterValues (+Response) (encode/decode)
+- AddObject (+Response) (encode/decode)
+- DeleteObject (+Response) (encode/decode)
+- Fault (cwmp and SOAP) (decode)
+
+## CPE client usage
+
+A minimal client is included to initiate a session and handle basic RPCs.
+
+```elixir
+children = [
+  {Bandit, plug: Caretaker.ACS.Server, port: 4000},
+  {Finch, name: Caretaker.Finch}
+]
+Supervisor.start_link(children, strategy: :one_for_one)
+
+{:ok, result} =
+  Caretaker.CPE.Client.run_session("http://localhost:4000/cwmp",
+    device_id: %{
+      manufacturer: "Acme",
+      oui: "A1B2C3",
+      product_class: "Router",
+      serial_number: "XYZ123"
+    }
+  )
+
+# The client will:
+# - Send Inform and await InformResponse
+# - POST empty to fetch next RPC
+# - Respond minimally to GetParameterValues (using device_id) and SetParameterValues (status 0)
+```
+
 ## Logging
 
 All logging uses Elixir Logger. Configure level in `config/config.exs`. No IO.puts or IO.inspect are used.

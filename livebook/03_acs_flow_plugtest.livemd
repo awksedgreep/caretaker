@@ -1,0 +1,53 @@
+# ACS Flow via Plug.Test (no external server)
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.ACS.Server
+alias Caretaker.CWMP.SOAP
+require Logger
+import Plug.Test
+
+# Start required processes
+{:ok, _} = Caretaker.ACS.Session.start_link([])
+if Code.ensure_loaded?(Caretaker.PubSub) and function_exported?(Caretaker.PubSub, :start_link, 1) do
+  {:ok, _} = Caretaker.PubSub.start_link([])
+end
+```
+
+## POST Inform -> 200 + InformResponse
+
+```elixir
+inform_xml = File.read!("test/fixtures/tr069/inform.xml")
+
+conn =
+  conn(:post, "/cwmp", inform_xml)
+  |> Plug.Conn.put_req_header("content-type", "text/xml; charset=utf-8")
+
+resp = Server.call(conn, Server.init([]))
+
+has_resp = resp.status == 200 and String.contains?(resp.resp_body, "<cwmp:InformResponse>")
+Logger.info("Inform handled status=#{resp.status} has_inform_response=#{has_resp}")
+{resp.status, has_resp}
+```
+
+## Empty POST -> Dequeue next RPC (GPV) or 204
+
+```elixir
+conn2 = conn(:post, "/cwmp", "")
+resp2 = Server.call(conn2, Server.init([]))
+
+outcome =
+  cond do
+    resp2.status == 200 and String.contains?(resp2.resp_body, "<cwmp:GetParameterValues") -> :dequeued_gpv
+    resp2.status == 204 -> :empty_queue
+    true -> {:unexpected, resp2.status}
+  end
+
+Logger.info("Dequeue result=#{inspect(outcome)}")
+{resp2.status, outcome}
+```

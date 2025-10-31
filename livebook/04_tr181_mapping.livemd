@@ -1,0 +1,49 @@
+# TR-181 Mapping: Merge GPV Response into Store
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CWMP.SOAP
+require Logger
+
+if Process.whereis(Caretaker.TR181.Store) == nil do
+  {:ok, _} = Caretaker.TR181.Store.start_link([])
+end
+```
+
+## Decode GetParameterValuesResponse from fixture
+
+```elixir
+xml = File.read!("test/fixtures/tr069/get_parameter_values_response.xml")
+
+{:ok, %{body: %{rpc: "GetParameterValuesResponse", xml: body_xml}}} =
+  SOAP.decode_envelope(xml)
+
+{:ok, data} = Caretaker.TR069.RPC.GetParameterValuesResponse.decode(body_xml)
+Logger.info("Decoded #{length(data.parameters)} parameters from GPV response")
+```
+
+## Merge into TR-181 Store and inspect
+
+```elixir
+dev_key = {"A1B2C3", "Router", "XYZ123"}
+
+:ok =
+  Caretaker.TR181.Store.merge_params(
+    dev_key,
+    data.parameters,
+    Caretaker.TR181.Schema.default()
+  )
+
+model = Caretaker.TR181.Store.get(dev_key)
+
+manuf = get_in(model, ["Device", "DeviceInfo", "Manufacturer"]) ||
+        get_in(model, ["Device.DeviceInfo.Manufacturer"]) # depending on shape
+
+Logger.info("Manufacturer=#{inspect(manuf)}")
+%{manufacturer: manuf, param_count: length(data.parameters)}
+```
