@@ -19,8 +19,10 @@ defmodule Caretaker.MixProject do
           "getting_started.md",
           "testing.md",
           "docs/phase-5-cpe-client.md",
-          "docs/telemetry.md",
-          "docs/release_checklist.md"
+"docs/telemetry.md",
+          "docs/release_checklist.md",
+          "docs/acs_setup.md",
+          "docs/adding_rpc.md"
         ],
         source_ref: "main"
       ]
