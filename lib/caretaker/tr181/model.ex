@@ -212,9 +212,11 @@ defmodule Caretaker.TR181.Model.Validate do
   defp flatten(map, prefix \\ "") do
     Enum.reduce(map, %{}, fn {k, v}, acc ->
       path = if prefix == "", do: k, else: prefix <> "." <> k
+
       cond do
         is_map(v) and Map.get(v, :__struct__) == nil ->
           Map.merge(acc, flatten(v, path))
+
         true ->
           Map.put(acc, path, v)
       end

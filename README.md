@@ -8,8 +8,8 @@ An Elixir TR-069/TR-181 toolkit.
 - Minimal ACS server built on Plug and Bandit
 - Telemetry-first design `[:caretaker, ...]`
 - Logger-based logging (no IO.puts or IO.inspect)
-- TR-181 model primitives (planned)
-- CPE client (planned)
+- TR-181 model primitives and store mapping
+- Minimal CPE client (Finch): Inform → InformResponse → empty POST, basic RPC handling (GPV)
 
 ## Installation
 
@@ -53,13 +53,13 @@ All logging uses Elixir Logger. Configure level in `config/config.exs`. No IO.pu
 
 ## Roadmap
 
-- Phase 0: Scaffolding, README, License, initial stubs, compile and test
-- Phase 1: TR-069 core (Inform/InformResponse with Lather), RPC registry, fixtures & tests
-- Phase 2: Minimal ACS (Plug + Bandit), parse Inform and respond; telemetry timing; integration tests
-- Phase 3: Expand RPCs (GetParameterNames/GetParameterValues/SetParameterValues/AddObject/DeleteObject); Fault handling
-- Phase 4: TR-181 model primitives and mapping helpers
-- Phase 5: CPE client session loop, retries/backoff, telemetry
-- Phase 6: Docs, examples, Hex release
+- Phase 0: Scaffolding, README, License, initial stubs, compile and test (done)
+- Phase 1: TR-069 core (Inform/InformResponse with Lather), RPC registry, fixtures & tests (done)
+- Phase 2: Minimal ACS (Plug + Bandit), parse Inform and respond; telemetry timing; integration tests (done)
+- Phase 3: Expand RPCs (GetParameterNames/GetParameterValues/SetParameterValues/AddObject/DeleteObject); Fault handling (done)
+- Phase 4: TR-181 model primitives and mapping helpers (done)
+- Phase 5: CPE client session loop, retries/backoff, telemetry (done)
+- Phase 6: Docs, examples, Hex release (in progress)
 
 ## Contributing
 

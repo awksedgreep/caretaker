@@ -14,7 +14,12 @@ defmodule Caretaker.MixProject do
       homepage_url: "https://github.com/markcotner/caretaker",
       docs: [
         main: "readme",
-        extras: ["README.md"],
+        extras: [
+          "README.md",
+          "docs/phase-5-cpe-client.md",
+          "docs/telemetry.md",
+          "docs/release_checklist.md"
+        ],
         source_ref: "main"
       ]
     ]
@@ -34,6 +39,7 @@ defmodule Caretaker.MixProject do
       {:telemetry, "~> 1.2"},
       {:jason, "~> 1.4"},
       {:tortoise311, "~> 0.12"},
+      {:finch, "~> 0.20"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end

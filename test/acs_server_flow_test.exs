@@ -1,7 +1,6 @@
 defmodule Caretaker.ACS.ServerFlowTest do
   use ExUnit.Case, async: false
   import Plug.Test
-  # import Plug.Conn
 
   test "Inform then empty POST returns queued GetParameterValues then 204" do
     _ = start_supervised(Caretaker.PubSub)

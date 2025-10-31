@@ -71,7 +71,7 @@ defmodule Caretaker.TR069.RPC.Inform do
         tag("MaxEnvelopes", Integer.to_string(inform.max_envelopes)),
         tag("CurrentTime", to_iso8601(inform.current_time)),
         tag("RetryCount", Integer.to_string(inform.retry_count)),
-        "<ParameterList arrayType=\"xsd:anyType[]\" xsi:type=\"cwmp:ParameterValueList\"></ParameterList>",
+        "<ParameterList xsi:type=\"cwmp:ParameterValueList\" arrayType=\"xsd:anyType[]\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"></ParameterList>",
         "</cwmp:Inform>"
       ]
 

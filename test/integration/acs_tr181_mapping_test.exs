@@ -41,7 +41,9 @@ defmodule Caretaker.Integration.ACSTR181MappingTest do
 
     # Load fixture and POST
     xml =
-      File.read!(Path.expand("../../test/fixtures/tr069/get_parameter_values_response.xml", __DIR__))
+      File.read!(
+        Path.expand("../../test/fixtures/tr069/get_parameter_values_response.xml", __DIR__)
+      )
 
     conn =
       conn(:post, "/cwmp", xml)

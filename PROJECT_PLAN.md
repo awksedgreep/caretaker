@@ -132,13 +132,47 @@ Acceptance
 Goals
 - Minimal client capable of initiating session and sending Inform to an ACS.
 - Retries/backoff and telemetry.
+- Fetch next RPC (empty POST) and respond to simple RPCs.
+
+Status (completed)
+- DONE: Finch-based HTTP transport and supervision
+- DONE: One-shot session: Inform -> InformResponse -> empty POST fetch
+- DONE: Namespace robustness (soapenv/xsi/xsd declarations)
+- DONE: Telemetry for session/http/retry; Logger-only logging
+- DONE: Integration test using Bandit ACS.Server
+- DONE: Minimal GPV Response from client using device_id fields
+- DONE: Full RPC loop until 204 with GPV response
+
 Tasks
-- HTTP client selection (TBD; keep dependency-light; may use Finch or Req if needed).
-- Session loop skeleton; configurable headers/timeouts; telemetry.
+- N/A (completed)
+
 Deliverables
-- Library-level client API with basic session start.
+- Library-level client API with session start and initial RPC handling.
+
 Acceptance
-- Integration test against local ACS route; telemetry asserted.
+- Integration tests pass for Inform round-trip and RPC (GPV) response; telemetry asserted.
+
+## Phase 6 — Docs & Release
+Goals
+- ExDoc guides, examples, README polish
+- Prepare for Hex release v0.1.0
+
+Status (in progress)
+- DONE: Initial CPE client guide stub
+- DONE: Telemetry guide
+- PENDING: README polish; release checklist run-through
+
+Tasks
+- Add docs/phase-5-cpe-client.md with usage and telemetry events
+- Update README Features/Roadmap to reflect Phase 4–5 completion
+- Verify mix docs builds; ensure docs.extras includes new guides
+- Prepare release checklist: version bump, changelog, hex metadata review
+
+Deliverables
+- Published docs with CPE example and telemetry
+
+Acceptance
+- mix docs builds; README and guides reflect current capabilities
 
 ## Phase 6 — Docs & Release
 Goals
