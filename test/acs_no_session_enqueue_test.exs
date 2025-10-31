@@ -1,6 +1,7 @@
 defmodule Caretaker.ACS.ServerNoSessionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Plug.Test
+  # import Plug.Conn
 
   @handler {__MODULE__, :no_session}
 

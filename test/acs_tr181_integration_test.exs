@@ -1,6 +1,7 @@
 defmodule Caretaker.ACS.TR181IntegrationTest do
   use ExUnit.Case, async: false
   import Plug.Test
+  # import Plug.Conn
 
   alias Caretaker.CWMP.SOAP
   alias Caretaker.TR069.RPC.GetParameterValuesResponse

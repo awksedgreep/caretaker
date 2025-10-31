@@ -1,6 +1,7 @@
 defmodule Caretaker.ACS.ServerTest do
   use ExUnit.Case, async: true
-  use Plug.Test
+  import Plug.Test
+  # import Plug.Conn
 
   test "POST /cwmp with empty body responds 204 and text/plain" do
     _ = start_supervised(Caretaker.ACS.Session)
@@ -32,7 +33,13 @@ defmodule Caretaker.ACS.ServerTest do
 
   test "malformed SOAP returns 400" do
     _ = start_supervised(Caretaker.PubSub)
-    xml = "<soapenv:Envelope><bad></soapenv:Envelope>"
+    xml = """
+    <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+      <soapenv:Body>
+        <bad/>
+      </soapenv:Body>
+    </soapenv:Envelope>
+    """
     conn = conn(:post, "/cwmp", xml)
     conn = Caretaker.ACS.Server.call(conn, Caretaker.ACS.Server.init([]))
     assert conn.status == 400

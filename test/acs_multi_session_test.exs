@@ -1,6 +1,7 @@
 defmodule Caretaker.ACS.MultiSessionTest do
   use ExUnit.Case, async: false
   import Plug.Test
+  # import Plug.Conn
 
   test "separate IP sessions dequeue independently" do
     _ = start_supervised(Caretaker.PubSub)
