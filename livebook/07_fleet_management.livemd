@@ -1,0 +1,173 @@
+# Fleet Management: Spawn and Control Multiple Devices
+
+> This notebook demonstrates the Fleet module for managing multiple simulated CPE devices.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CPE.Fleet
+require Logger
+```
+
+## Create a Fleet
+
+The Fleet module manages multiple simulated devices with:
+- Configurable device count and profiles
+- Staggered spawn timing to avoid thundering herd
+- Fleet-wide and per-device operations
+- Aggregate metrics and statistics
+
+```elixir
+{:ok, fleet} = Fleet.start_link(
+  acs_url: "http://localhost:4000/cwmp",
+  count: 10,
+  oui_prefix: "DEMO",
+  connection_delay: 50,  # ms between spawns
+  profiles: [
+    {60, :fiber_ont},     # 60% fiber ONTs
+    {40, :cable_modem}    # 40% cable modems
+  ],
+  behaviors: [
+    periodic_inform: [interval: 300_000, jitter: 30_000],
+    value_change_events: true
+  ]
+)
+
+Logger.info("Fleet created")
+Fleet.stats(fleet)
+```
+
+## Spawn All Devices
+
+Devices are spawned with staggered timing to simulate realistic connection patterns.
+
+```elixir
+{:ok, count} = Fleet.spawn_devices(fleet)
+Logger.info("Spawned #{count} devices")
+
+# Check fleet statistics
+stats = Fleet.stats(fleet)
+Logger.info("Total: #{stats.total}, Spawned: #{stats.spawned}")
+stats
+```
+
+## List and Inspect Devices
+
+```elixir
+# List all device serial numbers
+devices = Fleet.list_devices(fleet)
+Logger.info("Devices: #{inspect(devices)}")
+
+# Get details for a specific device
+first_device = List.first(devices)
+{:ok, device_info} = Fleet.get_device(fleet, first_device)
+Logger.info("Device #{first_device}: #{inspect(device_info)}")
+
+%{devices: devices, first_device: device_info}
+```
+
+## Per-Device Operations
+
+Control individual devices in the fleet.
+
+```elixir
+# Pick a device to work with
+[device_serial | _] = Fleet.list_devices(fleet)
+
+# Update a parameter on a specific device
+Fleet.update_param(fleet, device_serial, "Device.DeviceInfo.Description", "Test Device")
+
+# Trigger an inform on a specific device
+Fleet.trigger_inform(fleet, device_serial, ["4 VALUE CHANGE"])
+
+# Verify the update
+{:ok, info} = Fleet.get_device(fleet, device_serial)
+Logger.info("Updated device: #{inspect(info)}")
+
+info
+```
+
+## Fleet-Wide Operations
+
+Perform operations across all devices simultaneously.
+
+```elixir
+# Update a parameter on ALL devices
+Fleet.update_all_params(fleet, "Device.DeviceInfo.ProvisioningCode", "FLEET-001")
+
+# Trigger inform on ALL devices
+Fleet.trigger_all_informs(fleet, ["2 PERIODIC"])
+
+Logger.info("Fleet-wide operations complete")
+
+# Check updated stats
+Fleet.stats(fleet)
+```
+
+## Add a Device Dynamically
+
+Add new devices to a running fleet.
+
+```elixir
+# Add a new device with a specific profile
+{:ok, new_serial} = Fleet.add_device(fleet, profile: :fiber_ont)
+Logger.info("Added new device: #{new_serial}")
+
+# Verify it's in the fleet
+devices = Fleet.list_devices(fleet)
+Logger.info("Total devices now: #{length(devices)}")
+
+%{new_device: new_serial, total: length(devices)}
+```
+
+## Stop Individual Devices
+
+```elixir
+# Stop a specific device
+devices = Fleet.list_devices(fleet)
+device_to_stop = List.last(devices)
+
+Fleet.stop_device(fleet, device_to_stop)
+Logger.info("Stopped device: #{device_to_stop}")
+
+# Verify it's stopped
+remaining = Fleet.list_devices(fleet)
+Logger.info("Remaining devices: #{length(remaining)}")
+
+%{stopped: device_to_stop, remaining: length(remaining)}
+```
+
+## Fleet Statistics
+
+Get comprehensive metrics about the fleet.
+
+```elixir
+stats = Fleet.stats(fleet)
+
+Logger.info("""
+Fleet Statistics:
+  Total configured: #{stats.total}
+  Currently spawned: #{stats.spawned}
+  Stopped: #{stats.stopped}
+  Memory usage: #{Float.round(stats.memory_delta_bytes / 1_048_576, 2)} MB
+  Memory per device: #{Float.round(stats.memory_per_device_bytes / 1024, 2)} KB
+""")
+
+stats
+```
+
+## Cleanup
+
+```elixir
+# Stop all devices in the fleet
+Fleet.stop_all(fleet)
+
+Logger.info("All devices stopped")
+
+# Final stats
+Fleet.stats(fleet)
+```

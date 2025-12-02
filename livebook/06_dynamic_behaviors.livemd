@@ -1,0 +1,165 @@
+# Dynamic Behaviors: Periodic Inform, Dynamic Params, Value Change Events
+
+> This notebook demonstrates the DynamicBehavior module for realistic device simulation.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CPE.{DeviceState, DynamicBehavior}
+require Logger
+```
+
+## Create Device State with Initial Parameters
+
+```elixir
+{:ok, state} = DeviceState.start_link(
+  device_id: %{oui: "DEMO01", product_class: "Router", serial_number: "DYN001"},
+  params: %{
+    "Device.DeviceInfo.Manufacturer" => "Acme Corp",
+    "Device.DeviceInfo.SoftwareVersion" => "1.0.0",
+    "Device.DeviceInfo.UpTime" => "0",
+    "Device.IP.Interface.1.Stats.BytesSent" => "0",
+    "Device.IP.Interface.1.Stats.BytesReceived" => "0",
+    "Device.IP.Interface.1.Stats.PacketsSent" => "0",
+    "Device.IP.Interface.1.Stats.PacketsReceived" => "0"
+  }
+)
+
+Logger.info("Device state started")
+DeviceState.get(state, "Device.DeviceInfo.UpTime")
+```
+
+## Start Dynamic Behavior Manager
+
+The DynamicBehavior module manages:
+- **Periodic Inform**: Schedules "2 PERIODIC" events at regular intervals
+- **Dynamic Params**: Auto-updates UpTime and interface statistics
+- **Value Change Events**: Tracks parameter changes for "4 VALUE CHANGE" events
+
+```elixir
+{:ok, behavior} = DynamicBehavior.start_link(
+  device_state: state,
+  behaviors: [
+    # Periodic inform every 10 seconds with 2 second jitter (for demo)
+    periodic_inform: [interval: 10_000, jitter: 2_000],
+    
+    # Dynamic parameters to auto-update
+    dynamic_params: [
+      "Device.DeviceInfo.UpTime",
+      "Device.IP.Interface.1.Stats.BytesSent",
+      "Device.IP.Interface.1.Stats.BytesReceived"
+    ],
+    
+    # Track value changes
+    value_change_events: true
+  ]
+)
+
+Logger.info("DynamicBehavior started")
+DynamicBehavior.status(behavior)
+```
+
+## Start Behaviors and Check Status
+
+```elixir
+# Start all configured behaviors
+DynamicBehavior.start(behavior)
+
+# Wait a moment for initial updates
+Process.sleep(1500)
+
+# Check status
+status = DynamicBehavior.status(behavior)
+Logger.info("Running: #{status.running}, Pending events: #{status.pending_events}")
+status
+```
+
+## Observe Dynamic Parameter Updates
+
+UpTime and interface stats are automatically updated every second.
+
+```elixir
+# Check UpTime progression
+uptime1 = DeviceState.get(state, "Device.DeviceInfo.UpTime")
+Logger.info("UpTime (now): #{uptime1}")
+
+Process.sleep(2000)
+
+uptime2 = DeviceState.get(state, "Device.DeviceInfo.UpTime")
+Logger.info("UpTime (+2s): #{uptime2}")
+
+# Check interface stats
+bytes_sent = DeviceState.get(state, "Device.IP.Interface.1.Stats.BytesSent")
+Logger.info("BytesSent: #{bytes_sent}")
+
+%{uptime_before: uptime1, uptime_after: uptime2, bytes_sent: bytes_sent}
+```
+
+## Trigger Value Change Events
+
+When parameters are modified, a "4 VALUE CHANGE" event is generated.
+
+```elixir
+# Modify a parameter - this triggers value change tracking
+DeviceState.set(state, "Device.DeviceInfo.SoftwareVersion", "2.0.0")
+
+# Check pending events
+events = DynamicBehavior.pending_events(behavior)
+Logger.info("Pending events: #{inspect(events)}")
+
+# Check changed parameters
+status = DynamicBehavior.status(behavior)
+Logger.info("Changed params count: #{status.changed_params}")
+
+events
+```
+
+## Manually Trigger Periodic Inform
+
+You can manually trigger a periodic inform event for testing.
+
+```elixir
+# Clear any existing events first
+DynamicBehavior.clear_events(behavior)
+
+# Manually trigger periodic inform
+DynamicBehavior.trigger_periodic_inform(behavior)
+
+# Check pending events
+events = DynamicBehavior.pending_events(behavior)
+Logger.info("After manual trigger: #{inspect(events)}")
+
+events
+```
+
+## Add Custom Events
+
+You can add custom TR-069 event codes.
+
+```elixir
+# Add a boot event
+DynamicBehavior.add_event(behavior, "1 BOOT", "manual-reboot")
+
+# Add a connection request event
+DynamicBehavior.add_event(behavior, "6 CONNECTION REQUEST", "")
+
+events = DynamicBehavior.pending_events(behavior)
+Logger.info("All pending events: #{inspect(events)}")
+
+events
+```
+
+## Cleanup
+
+```elixir
+DynamicBehavior.stop_behaviors(behavior)
+DynamicBehavior.stop(behavior)
+DeviceState.stop(state)
+
+Logger.info("Cleanup complete")
+:ok
+```

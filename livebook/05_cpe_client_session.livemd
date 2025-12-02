@@ -9,6 +9,7 @@ Mix.install([
   {:caretaker, path: "."}
 ])
 
+alias Caretaker.CPE.{Client, DeviceState}
 require Logger
 
 {:ok, sup} =
@@ -22,11 +23,11 @@ require Logger
   )
 ```
 
-## Run one-shot session
+## Run one-shot session (basic)
 
 ```elixir
 {:ok, result} =
-  Caretaker.CPE.Client.run_session(
+  Client.run_session(
     "http://localhost:4051/cwmp",
     device_id: %{
       manufacturer: "Acme",
@@ -39,6 +40,40 @@ require Logger
   )
 
 Logger.info("Session result=#{inspect(result)}")
+result
+```
+
+## Run session with stateful device (Phase 1+)
+
+```elixir
+# Create a device state with TR-181 parameters
+{:ok, state} = DeviceState.start_link(
+  device_id: %{oui: "DEMO01", product_class: "Router", serial_number: "STATE001"},
+  params: %{
+    "Device.DeviceInfo.Manufacturer" => "Caretaker Demo",
+    "Device.DeviceInfo.SoftwareVersion" => "1.0.0",
+    "Device.DeviceInfo.UpTime" => "12345",
+    "Device.IP.Interface.1.Enable" => "true",
+    "Device.IP.Interface.1.IPv4Address.1.IPAddress" => "192.168.1.100"
+  }
+)
+
+# Run session with device state - GetParameterValues will return real data
+{:ok, result} =
+  Client.run_session(
+    "http://localhost:4051/cwmp",
+    device_id: %{
+      manufacturer: "Caretaker Demo",
+      oui: "DEMO01",
+      product_class: "Router",
+      serial_number: "STATE001"
+    },
+    device_state: state,
+    max_retries: 2,
+    timeout: 3000
+  )
+
+Logger.info("Stateful session result=#{inspect(result)}")
 result
 ```
 

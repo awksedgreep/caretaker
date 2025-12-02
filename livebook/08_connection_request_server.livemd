@@ -1,0 +1,209 @@
+# Connection Request Server: ACS-Initiated Device Contact
+
+> This notebook demonstrates the ConnectionRequestServer for ACS-initiated connections.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CPE.{ConnectionRequestServer, Fleet, DynamicBehavior}
+require Logger
+```
+
+## Start Connection Request Server (No Auth)
+
+The ConnectionRequestServer provides a single HTTP endpoint for ACS-initiated connection requests.
+Devices are identified by path: `/cr/:serial_number`
+
+```elixir
+{:ok, server} = ConnectionRequestServer.start_link(
+  port: 7547,
+  on_connection_request: fn serial_number ->
+    Logger.info("Connection request received for: #{serial_number}")
+    :ok
+  end
+)
+
+# Get server URLs
+base_url = ConnectionRequestServer.base_url(server)
+device_url = ConnectionRequestServer.device_url(server, "DEVICE001")
+
+Logger.info("Server running at: #{base_url}")
+Logger.info("Device URL example: #{device_url}")
+
+%{base_url: base_url, device_url: device_url}
+```
+
+## Test Health Check Endpoint
+
+```elixir
+{:ok, resp} = Finch.build(:get, "http://localhost:7547/health")
+  |> Finch.request(Caretaker.Finch)
+
+Logger.info("Health check: #{resp.status}")
+resp.body
+```
+
+## Test Connection Request (Device Not Found)
+
+When the server can't find the device, it returns 404.
+
+```elixir
+{:ok, resp} = Finch.build(:get, "http://localhost:7547/cr/UNKNOWN_DEVICE")
+  |> Finch.request(Caretaker.Finch)
+
+Logger.info("Unknown device response: #{resp.status}")
+{resp.status, resp.body}
+```
+
+## Stop First Server
+
+```elixir
+ConnectionRequestServer.stop(server)
+Logger.info("Server stopped")
+:ok
+```
+
+## Start Server with Authentication
+
+The server supports Basic and Digest authentication.
+
+```elixir
+{:ok, auth_server} = ConnectionRequestServer.start_link(
+  port: 7548,
+  auth: %{username: "admin", password: "secret123"},
+  on_connection_request: fn serial_number ->
+    Logger.info("Authenticated request for: #{serial_number}")
+    :ok
+  end
+)
+
+Logger.info("Authenticated server running on port 7548")
+ConnectionRequestServer.base_url(auth_server)
+```
+
+## Test Unauthenticated Request (Should Fail)
+
+```elixir
+{:ok, resp} = Finch.build(:get, "http://localhost:7548/cr/DEVICE001")
+  |> Finch.request(Caretaker.Finch)
+
+Logger.info("Unauthenticated response: #{resp.status}")
+
+# Should be 401 Unauthorized
+{resp.status, Enum.find(resp.headers, fn {k, _} -> k == "www-authenticate" end)}
+```
+
+## Test with Basic Authentication
+
+```elixir
+# Create Basic auth header
+credentials = Base.encode64("admin:secret123")
+auth_header = {"authorization", "Basic #{credentials}"}
+
+{:ok, resp} = Finch.build(:get, "http://localhost:7548/cr/DEVICE001", [auth_header])
+  |> Finch.request(Caretaker.Finch)
+
+Logger.info("Authenticated response: #{resp.status}")
+{resp.status, resp.body}
+```
+
+## Stop Auth Server
+
+```elixir
+ConnectionRequestServer.stop(auth_server)
+Logger.info("Auth server stopped")
+:ok
+```
+
+## Integration with Fleet
+
+The most powerful use case is integrating the connection request server with a Fleet.
+
+```elixir
+# Start a fleet of devices
+{:ok, fleet} = Fleet.start_link(
+  acs_url: "http://localhost:4000/cwmp",
+  count: 5,
+  oui_prefix: "FLEET",
+  connection_delay: 0,
+  behaviors: [value_change_events: true]
+)
+
+Fleet.spawn_devices(fleet)
+devices = Fleet.list_devices(fleet)
+Logger.info("Fleet devices: #{inspect(devices)}")
+
+devices
+```
+
+## Trigger Connection Request via Fleet
+
+The Fleet module provides `trigger_connection_request/2` to add a "6 CONNECTION REQUEST" event.
+
+```elixir
+# Pick a device
+[device_serial | _] = Fleet.list_devices(fleet)
+
+# Trigger connection request event
+:ok = Fleet.trigger_connection_request(fleet, device_serial)
+Logger.info("Triggered connection request for: #{device_serial}")
+
+# Verify the event was added
+{:ok, device_info} = Fleet.get_device(fleet, device_serial)
+behavior_pid = device_info.behavior
+
+if behavior_pid do
+  events = DynamicBehavior.pending_events(behavior_pid)
+  Logger.info("Pending events: #{inspect(events)}")
+  events
+else
+  Logger.info("No behavior manager attached")
+  []
+end
+```
+
+## Test Error Handling
+
+```elixir
+# Try to trigger on non-existent device
+result = Fleet.trigger_connection_request(fleet, "NONEXISTENT")
+Logger.info("Non-existent device result: #{inspect(result)}")
+
+result
+```
+
+## Cleanup
+
+```elixir
+Fleet.stop_all(fleet)
+Logger.info("Fleet stopped")
+:ok
+```
+
+## Full Integration Example
+
+This example shows a complete setup with ACS server, Fleet, and Connection Request Server working together.
+
+```elixir
+# This would be a full integration in production:
+# 
+# 1. Start ACS Server on port 4000
+# 2. Start Connection Request Server on port 7547
+# 3. Start Fleet with devices that report ConnectionRequestURL
+# 4. ACS sends HTTP GET to /cr/:serial_number
+# 5. Device receives "6 CONNECTION REQUEST" event
+# 6. Device initiates new Inform session to ACS
+#
+# Example flow:
+#   ACS -> GET http://cpe-host:7547/cr/FLEET-000001
+#   CPE -> POST http://acs:4000/cwmp (Inform with "6 CONNECTION REQUEST")
+#   ACS -> InformResponse
+#   ... normal session continues
+
+Logger.info("See test/connection_request_server_test.exs for full integration tests")
+:ok
+```
