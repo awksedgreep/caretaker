@@ -673,50 +673,94 @@ Report.generate(test_run,
 
 ---
 
-## Phase 8 (Optional): Connection Request Server
+## Phase 8: Connection Request Server ✅ COMPLETE
 
 **Goal:** Support ACS-initiated connections (connection request URL).
 
+**Status:** ✅ All deliverables complete. 213 tests passing.
+
 ### Deliverables
 
-#### 8.1 Connection Request Listener
+#### 8.1 Connection Request Server ✅ COMPLETE
 ```elixir
 Caretaker.CPE.ConnectionRequestServer
 ```
 
 **Features:**
-- HTTP server listening on per-device port or path
-- Authentication (username/password)
-- Respond to connection requests
-- Trigger new Inform session
+- ✅ Single-port HTTP server with path-based routing
+- ✅ Path format: `/cr/:serial_number` for device identification
+- ✅ Basic and Digest authentication support
+- ✅ Health check endpoint at `/health`
+- ✅ Fleet integration via callback
+- ✅ Comprehensive telemetry events
 
-#### 8.2 Integration with Device
-- Each device exposes ConnectionRequestURL in Inform
-- Devices maintain persistent connection request listener
-- Handle connection requests while idle
-
-#### 8.3 URL Management
+**API:**
 ```elixir
-# Dynamic port allocation per device
-device = Device.new(
-  connection_request: %{
-    enabled: true,
-    port: :auto,  # or specific port
-    auth: %{username: "admin", password: "secret"}
-  }
+# Start standalone server
+{:ok, server} = ConnectionRequestServer.start_link(
+  port: 7547,
+  auth: %{username: "admin", password: "secret"},
+  on_connection_request: fn serial_number ->
+    # Called when device receives connection request
+    IO.puts("Connection request for #{serial_number}")
+  end
 )
 
-# URL reported in Inform
-# => "http://192.168.1.100:7547/connection_request"
+# Get server URLs
+ConnectionRequestServer.base_url(server)         # => "http://localhost:7547"
+ConnectionRequestServer.device_url(server, "SN001")  # => "http://localhost:7547/cr/SN001"
+
+# Stop server
+ConnectionRequestServer.stop(server)
 ```
 
-**Success Criteria:**
-- ACS can initiate contact with idle devices
-- Connection request triggers new session
-- Authentication works correctly
-- No port conflicts with multiple devices
+#### 8.2 Fleet Integration ✅ COMPLETE
+- ✅ Fleet.trigger_connection_request/2 - Trigger event on specific device
+- ✅ "6 CONNECTION REQUEST" event added to device's pending events
+- ✅ Error handling for non-existent devices
 
-**Estimated Effort:** 3-4 days
+```elixir
+# Trigger connection request via Fleet
+{:ok, fleet} = Fleet.start_link(acs_url: "http://localhost:4000/cwmp", count: 5)
+Fleet.spawn_devices(fleet)
+
+# Trigger connection request on specific device
+:ok = Fleet.trigger_connection_request(fleet, "FLEET0-000003")
+
+# Error for non-existent device
+{:error, :not_found} = Fleet.trigger_connection_request(fleet, "UNKNOWN")
+```
+
+#### 8.3 Authentication ✅ COMPLETE
+- ✅ No auth mode (accepts all requests)
+- ✅ Basic authentication
+- ✅ Digest authentication (RFC 2617 compliant)
+- ✅ Returns 401 Unauthorized for invalid credentials
+
+#### 8.4 Telemetry Events ✅ COMPLETE
+```elixir
+[:caretaker, :connection_request, :server, :started]   # Server started (port, auth enabled)
+[:caretaker, :connection_request, :received]           # Request received (serial_number)
+[:caretaker, :connection_request, :triggered]          # Event added to device (serial_number)
+[:caretaker, :connection_request, :not_found]          # Unknown device (serial_number)
+[:caretaker, :connection_request, :unauthorized]       # Auth failed (serial_number)
+```
+
+**Files Created/Modified:**
+- `lib/caretaker/cpe/connection_request_server.ex` (NEW: 260 lines)
+- `lib/caretaker/cpe/fleet.ex` (MODIFIED: Added trigger_connection_request/2)
+- `test/connection_request_server_test.exs` (NEW: 18 tests)
+
+**Success Criteria:**
+- ✅ Single-port server with path-based device routing
+- ✅ ACS can initiate contact with idle devices via HTTP GET
+- ✅ Connection request triggers "6 CONNECTION REQUEST" event
+- ✅ Basic and Digest authentication work correctly
+- ✅ Fleet integration for triggering events
+- ✅ Comprehensive telemetry for monitoring
+- ✅ All 18 new tests passing (213 total)
+
+**Actual Effort:** 0.5 day (estimated 3-4 days)
 
 ---
 

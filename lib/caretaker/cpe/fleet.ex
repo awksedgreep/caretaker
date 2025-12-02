@@ -113,6 +113,17 @@ defmodule Caretaker.CPE.Fleet do
   end
 
   @doc """
+  Trigger a connection request for a specific device.
+
+  This adds a "6 CONNECTION REQUEST" event and is typically called by the
+  ConnectionRequestServer when an ACS sends a connection request.
+  """
+  @spec trigger_connection_request(GenServer.server(), String.t()) :: :ok | {:error, :not_found | :no_behavior}
+  def trigger_connection_request(server, serial_number) do
+    GenServer.call(server, {:trigger_connection_request, serial_number})
+  end
+
+  @doc """
   Trigger Inform for all devices.
   """
   @spec trigger_all_informs(GenServer.server(), [String.t()]) :: :ok
@@ -271,6 +282,30 @@ defmodule Caretaker.CPE.Fleet do
             DynamicBehavior.add_event(behavior, event, "")
           end)
 
+          new_device = %{device | last_inform: DateTime.utc_now()}
+          new_devices = Map.put(state.devices, serial_number, new_device)
+          {:reply, :ok, %{state | devices: new_devices}}
+        else
+          {:reply, {:error, :behavior_dead}, state}
+        end
+
+      _ ->
+        {:reply, {:error, :no_behavior}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:trigger_connection_request, serial_number}, _from, state) do
+    case Map.get(state.devices, serial_number) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      %{dynamic_behavior: nil} ->
+        {:reply, {:error, :no_behavior}, state}
+
+      %{dynamic_behavior: behavior} = device when is_pid(behavior) ->
+        if Process.alive?(behavior) do
+          DynamicBehavior.add_event(behavior, "6 CONNECTION REQUEST", "")
           new_device = %{device | last_inform: DateTime.utc_now()}
           new_devices = Map.put(state.devices, serial_number, new_device)
           {:reply, :ok, %{state | devices: new_devices}}

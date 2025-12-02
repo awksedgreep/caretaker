@@ -2,7 +2,6 @@ defmodule Caretaker.CPE.FleetTest do
   use ExUnit.Case, async: true
 
   alias Caretaker.CPE.Fleet
-  alias Caretaker.CPE.DeviceState
 
   describe "start_link/1" do
     test "starts with required acs_url" do
