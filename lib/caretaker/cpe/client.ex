@@ -42,6 +42,14 @@ defmodule Caretaker.CPE.Client do
     1) POST Inform and verify InformResponse
     2) POST empty body to fetch queued RPC
   Returns the received RPC (if any) with metadata.
+
+  Options:
+    - `device_id` - Device identification map (required if no device_state)
+    - `device_state` - DeviceState agent (optional, enables stateful responses)
+    - `device_profile` - Path to JSON profile to load (optional)
+    - `timeout`, `max_retries`, `backoff_base` - HTTP settings
+    - `events` - Event codes for Inform (default: ["1 BOOT"])
+    - `cwmp_ns` - CWMP namespace
   """
   @spec run_session(String.t(), keyword()) :: session_result()
   def run_session(acs_url, opts \\ []) when is_binary(acs_url) do
@@ -51,6 +59,7 @@ defmodule Caretaker.CPE.Client do
     cwmp_ns = Keyword.get(opts, :cwmp_ns, @default_cwmp_ns)
     max_retries = Keyword.get(opts, :max_retries, @default_max_retries)
     backoff_base = Keyword.get(opts, :backoff_base, @default_backoff)
+    device_state = Keyword.get(opts, :device_state)
 
     device_id =
       Keyword.get(opts, :device_id, %{
@@ -82,7 +91,7 @@ defmodule Caretaker.CPE.Client do
              backoff_base
            ),
          {:ok, %{body: %{rpc: "InformResponse"}}} <- SOAP.decode_envelope(ack_xml) do
-      case session_loop(acs_url, cwmp_ns, device_id, timeout, max_retries, backoff_base) do
+      case session_loop(acs_url, cwmp_ns, device_id, device_state, timeout, max_retries, backoff_base) do
         {:ok, last_rpc} ->
           :telemetry.execute([:caretaker, :cpe_client, :session, :stop], %{}, %{
             acs_url: acs_url,
@@ -115,7 +124,7 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_base, last_rpc \\ nil) do
+defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retries, backoff_base, last_rpc \\ nil) do
     empty_res =
       http_retry(
         fn ->
@@ -131,15 +140,15 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
 
       {:ok, %{status: 200, body: rpc_xml}} ->
         case SOAP.decode_envelope(rpc_xml) do
-          {:ok, %{header: %{id: id, cwmp_ns: ns2}, body: %{rpc: rpc_name}}} ->
+          {:ok, %{header: %{id: id, cwmp_ns: ns2}, body: %{rpc: rpc_name, xml: body_xml}}} ->
             :telemetry.execute([:caretaker, :cpe_client, :rpc, :received], %{}, %{
               acs_url: acs_url,
               cwmp_ns: ns2 || prev_ns,
               rpc: rpc_name
             })
 
-            _ = respond_to_rpc(acs_url, rpc_name, device_id, (ns2 || prev_ns), timeout, id)
-            session_loop(acs_url, (ns2 || prev_ns), device_id, timeout, max_retries, backoff_base, rpc_name)
+            _ = respond_to_rpc(acs_url, rpc_name, body_xml, device_id, device_state, (ns2 || prev_ns), timeout, id)
+            session_loop(acs_url, (ns2 || prev_ns), device_id, device_state, timeout, max_retries, backoff_base, rpc_name)
 
           {:ok, _other} ->
             {:error, :unexpected_envelope}
@@ -156,20 +165,35 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
     end
   end
 
-  defp respond_to_rpc(acs_url, rpc, device_id, ns, timeout, id)
-  defp respond_to_rpc(acs_url, "GetParameterValues", device_id, ns, timeout, id) do
-    params = [
-      %{
-        name: "Device.DeviceInfo.Manufacturer",
-        value: device_id.manufacturer,
-        type: "xsd:string"
-      },
-      %{
-        name: "Device.DeviceInfo.SerialNumber",
-        value: device_id.serial_number,
-        type: "xsd:string"
-      }
-    ]
+  defp respond_to_rpc(acs_url, rpc, rpc_xml, device_id, device_state, ns, timeout, id)
+
+  defp respond_to_rpc(acs_url, "GetParameterValues", rpc_xml, device_id, device_state, ns, timeout, id) do
+    # Parse the GetParameterValues XML to extract requested parameter names
+    requested_paths = parse_parameter_names(rpc_xml)
+
+    params =
+      case device_state do
+        nil ->
+          # Fallback: return minimal hardcoded params from device_id
+          [
+            %{
+              name: "Device.DeviceInfo.Manufacturer",
+              value: device_id.manufacturer,
+              type: "xsd:string"
+            },
+            %{
+              name: "Device.DeviceInfo.SerialNumber",
+              value: device_id.serial_number,
+              type: "xsd:string"
+            }
+          ]
+
+        state ->
+          # Use DeviceState to get requested parameters
+          Enum.flat_map(requested_paths, fn path ->
+            Caretaker.CPE.DeviceState.get_parameters(state, path)
+          end)
+      end
 
     with {:ok, body} <-
            Caretaker.TR069.RPC.GetParameterValuesResponse.encode(%{parameters: params}),
@@ -178,7 +202,8 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
       :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
         acs_url: acs_url,
         cwmp_ns: ns,
-        rpc: "GetParameterValues"
+        rpc: "GetParameterValues",
+        param_count: length(params)
       })
 
       :ok
@@ -189,7 +214,27 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
     end
   end
 
-  defp respond_to_rpc(acs_url, "SetParameterValues", _device_id, ns, timeout, id) do
+  defp respond_to_rpc(acs_url, "SetParameterValues", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse SetParameterValues XML to extract parameters
+    params_to_set = parse_parameter_values(rpc_xml)
+
+    case device_state do
+      nil ->
+        # No state to update, just return success
+        :ok
+
+      state when params_to_set != [] ->
+        # Update device state with new parameter values
+        Caretaker.CPE.DeviceState.update_parameters(state, params_to_set)
+
+        :telemetry.execute([:caretaker, :cpe_client, :params, :updated], %{}, %{
+          count: length(params_to_set)
+        })
+
+      _ ->
+        :ok
+    end
+
     with {:ok, body} <- Caretaker.TR069.RPC.SetParameterValuesResponse.encode(%{status: 0}),
          {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
          {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
@@ -207,9 +252,62 @@ defp session_loop(acs_url, prev_ns, device_id, timeout, max_retries, backoff_bas
     end
   end
 
-  defp respond_to_rpc(_acs_url, rpc, _device_id, _ns, _timeout, _id) when is_binary(rpc) do
+  defp respond_to_rpc(_acs_url, rpc, _rpc_xml, _device_id, _device_state, _ns, _timeout, _id) when is_binary(rpc) do
     :telemetry.execute([:caretaker, :cpe_client, :rpc, :unsupported], %{}, %{rpc: rpc})
     :ok
+  end
+
+  # Parse ParameterNames from GetParameterValues XML
+  # Extracts the "string" elements from the ParameterNames array
+  defp parse_parameter_names(xml) do
+    case Lather.Xml.Parser.parse(xml) do
+      {:ok, parsed} ->
+        parsed
+        |> get_in(["ParameterNames", "string"])
+        |> case do
+          nil -> ["Device.DeviceInfo."]
+          list when is_list(list) -> Enum.map(list, &Map.get(&1, "string", "Device.DeviceInfo."))
+          single -> [Map.get(single, "string", "Device.DeviceInfo.")]
+        end
+
+      {:error, _} ->
+        ["Device.DeviceInfo."]
+    end
+  end
+
+  # Parse ParameterList from SetParameterValues XML
+  # Extracts name, value, and type from ParameterValueStruct elements
+  defp parse_parameter_values(xml) do
+    case Lather.Xml.Parser.parse(xml) do
+      {:ok, parsed} ->
+        parsed
+        |> get_in(["ParameterList", "ParameterValueStruct"])
+        |> case do
+          nil ->
+            []
+
+          list when is_list(list) ->
+            Enum.map(list, fn struct ->
+              %{
+                name: Map.get(struct, "Name", ""),
+                value: Map.get(struct, "Value", ""),
+                type: struct["@xsi:type"] || "xsd:string"
+              }
+            end)
+
+          single ->
+            [
+              %{
+                name: Map.get(single, "Name", ""),
+                value: Map.get(single, "Value", ""),
+                type: single["@xsi:type"] || "xsd:string"
+              }
+            ]
+        end
+
+      {:error, _} ->
+        []
+    end
   end
 
   # -- HTTP helpers --

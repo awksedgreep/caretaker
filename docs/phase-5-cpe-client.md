@@ -39,6 +39,71 @@ Supervisor.start_link(children, strategy: :one_for_one)
 # result = %{cwmp_id: ..., cwmp_ns: ..., inform_ack: true, rpc: "GetParameterValues" | nil}
 ```
 
+## Stateful Device Simulation (NEW in Phase 1)
+
+The CPE client now supports stateful TR-181 parameter storage via `DeviceState`. This allows simulated devices to maintain realistic parameter sets throughout the session.
+
+### Using DeviceState with Device Profiles
+
+```elixir
+# Create device state with a pre-defined profile
+{:ok, device_state} = Caretaker.CPE.DeviceState.start_link(
+  device_id: %{oui: "A1B2C3", product_class: "FiberONT", serial_number: "SN001"}
+)
+
+# Load a profile (fiber ONU, cable modem, etc.)
+:ok = Caretaker.CPE.DeviceState.load_profile(device_state, "priv/profiles/fiber_ont.json")
+
+# Run session with stateful device
+{:ok, result} = Caretaker.CPE.Client.run_session("http://localhost:4000/cwmp",
+  device_state: device_state
+)
+
+# The device will now respond to GetParameterValues with actual profile data
+# and SetParameterValues will update the device state
+```
+
+### Available Profiles
+
+- `priv/profiles/fiber_ont.json` - GPON ONU with 67 TR-181 parameters
+- `priv/profiles/cable_modem.json` - DOCSIS 3.1 cable modem with 53 parameters
+
+### Manual Parameter Management
+
+```elixir
+# Get a specific parameter
+version = Caretaker.CPE.DeviceState.get(device_state, "Device.DeviceInfo.SoftwareVersion")
+
+# Set a parameter
+:ok = Caretaker.CPE.DeviceState.set(device_state, "Device.DeviceInfo.SoftwareVersion", "2.0.0")
+
+# Get all parameters under a path (returns nested map)
+device_info = Caretaker.CPE.DeviceState.get_tree(device_state, "Device.DeviceInfo")
+
+# Get parameters as TR-069 parameter list
+params = Caretaker.CPE.DeviceState.get_parameters(device_state, "Device.ManagementServer.")
+# => [%{name: "Device.ManagementServer.URL", value: "...", type: "xsd:string"}, ...]
+```
+
+### RPC Behavior with DeviceState
+
+When `device_state` is provided to `run_session/2`:
+
+**GetParameterValues:**
+- Parses incoming RPC to extract requested parameter names
+- Queries device state for matching parameters
+- Returns complete parameter list with correct types from profile
+- Supports wildcard queries (e.g., `Device.DeviceInfo.` returns all children)
+
+**SetParameterValues:**
+- Parses incoming RPC to extract parameters, values, and types
+- Updates device state via `update_parameters/2`
+- Emits telemetry event `[:caretaker, :cpe_client, :params, :updated]`
+- Returns status 0 (success)
+
+**Fallback Behavior:**
+If no `device_state` is provided, the client uses hardcoded values (Manufacturer and SerialNumber from device_id).
+
 ## Telemetry
 
 Events emitted by the client:
@@ -46,8 +111,9 @@ Events emitted by the client:
 - `[:caretaker, :cpe_client, :http, :request, :start|:stop]` — HTTP requests
 - `[:caretaker, :cpe_client, :retry]` — retry with backoff
 - `[:caretaker, :cpe_client, :rpc, :received]` — RPC received from ACS
-- `[:caretaker, :cpe_client, :rpc, :responded]` — RPC responded by client
+- `[:caretaker, :cpe_client, :rpc, :responded]` — RPC responded by client (includes `param_count` for GetParameterValues)
 - `[:caretaker, :cpe_client, :rpc, :unsupported]` — RPC not handled by client
+- `[:caretaker, :cpe_client, :params, :updated]` — SetParameterValues updated device state (includes `count`)
 - `[:caretaker, :cpe_client, :error]` — errors
 
 Attach handlers in tests or your app to observe metrics and state.

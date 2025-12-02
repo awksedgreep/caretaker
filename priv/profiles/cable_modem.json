@@ -1,0 +1,96 @@
+{
+  "Device": {
+    "DeviceInfo": {
+      "Manufacturer": "CableVendor",
+      "ManufacturerOUI": "D4E5F6",
+      "ModelName": "DOCSIS-CM-3000",
+      "Description": "Cable Modem DOCSIS 3.1",
+      "ProductClass": "CableModem",
+      "SerialNumber": "CM987654321",
+      "HardwareVersion": "2.0",
+      "SoftwareVersion": "1.8.3",
+      "ProvisioningCode": "",
+      "UpTime": 172800,
+      "FirstUseDate": "2024-02-01T14:20:00Z"
+    },
+    "ManagementServer": {
+      "URL": "http://acs.cable.com:7547/",
+      "Username": "cpe_user",
+      "Password": "",
+      "PeriodicInformEnable": true,
+      "PeriodicInformInterval": 600,
+      "PeriodicInformTime": "0001-01-01T00:00:00Z",
+      "ConnectionRequestURL": "http://10.10.10.50:7547/",
+      "ConnectionRequestUsername": "cpe_conn",
+      "ConnectionRequestPassword": ""
+    },
+    "IP": {
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "cm0",
+          "Type": "Normal",
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "10.10.10.50",
+              "SubnetMask": "255.255.255.0"
+            }
+          },
+          "Stats": {
+            "BytesSent": 52428800,
+            "BytesReceived": 104857600,
+            "PacketsSent": 409600,
+            "PacketsReceived": 819200,
+            "ErrorsSent": 2,
+            "ErrorsReceived": 5
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "eth0",
+          "Type": "Normal",
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "192.168.100.1",
+              "SubnetMask": "255.255.255.0"
+            }
+          },
+          "Stats": {
+            "BytesSent": 5242880,
+            "BytesReceived": 10485760,
+            "PacketsSent": 40960,
+            "PacketsReceived": 81920,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0
+          }
+        }
+      }
+    },
+    "CableModem": {
+      "DOCSISVersion": "3.1",
+      "DownstreamChannel": {
+        "1": {
+          "ChannelID": 1,
+          "Frequency": 579000000,
+          "PowerLevel": 3,
+          "SNRLevel": 38,
+          "Modulation": "QAM256"
+        }
+      },
+      "UpstreamChannel": {
+        "1": {
+          "ChannelID": 1,
+          "Frequency": 36000000,
+          "PowerLevel": 45,
+          "ChannelType": "ATDMA"
+        }
+      }
+    }
+  }
+}

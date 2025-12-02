@@ -1,0 +1,98 @@
+{
+  "Device": {
+    "DeviceInfo": {
+      "Manufacturer": "FiberVendor",
+      "ManufacturerOUI": "A1B2C3",
+      "ModelName": "GPON-ONU-1000",
+      "Description": "Fiber Optical Network Terminal",
+      "ProductClass": "FiberONT",
+      "SerialNumber": "FON123456789",
+      "HardwareVersion": "1.0",
+      "SoftwareVersion": "2.1.5",
+      "ProvisioningCode": "",
+      "UpTime": 86400,
+      "FirstUseDate": "2024-01-15T10:30:00Z",
+      "VendorConfigFile": {
+        "1": {
+          "Name": "config.xml",
+          "Version": "1.0",
+          "Date": "2024-01-15T10:30:00Z",
+          "Description": "Default configuration"
+        }
+      }
+    },
+    "ManagementServer": {
+      "URL": "http://acs.example.com:7547/",
+      "Username": "cpe_user",
+      "Password": "",
+      "PeriodicInformEnable": true,
+      "PeriodicInformInterval": 300,
+      "PeriodicInformTime": "0001-01-01T00:00:00Z",
+      "ConnectionRequestURL": "http://192.168.1.1:7547/",
+      "ConnectionRequestUsername": "cpe_conn",
+      "ConnectionRequestPassword": ""
+    },
+    "IP": {
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "eth0",
+          "Type": "Normal",
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "192.168.1.100",
+              "SubnetMask": "255.255.255.0"
+            }
+          },
+          "Stats": {
+            "BytesSent": 1048576,
+            "BytesReceived": 2097152,
+            "PacketsSent": 8192,
+            "PacketsReceived": 16384,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "gpon0",
+          "Type": "Normal",
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "10.0.0.50",
+              "SubnetMask": "255.255.255.0"
+            }
+          },
+          "Stats": {
+            "BytesSent": 10485760,
+            "BytesReceived": 20971520,
+            "PacketsSent": 81920,
+            "PacketsReceived": 163840,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0
+          }
+        }
+      }
+    },
+    "Optical": {
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "gpon0",
+          "LowerLayers": "",
+          "OpticalSignalLevel": -18,
+          "TransmitOpticalLevel": 2,
+          "LowerOpticalThreshold": -27,
+          "UpperOpticalThreshold": -8
+        }
+      }
+    }
+  }
+}
