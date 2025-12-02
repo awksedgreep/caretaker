@@ -252,6 +252,74 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     end
   end
 
+  defp respond_to_rpc(acs_url, "GetParameterNames", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse GetParameterNames RPC to extract path and next_level
+    {path, next_level} =
+      case Caretaker.TR069.RPC.GetParameterNames.decode(rpc_xml) do
+        {:ok, %{parameter_path: p, next_level: nl}} -> {p, nl}
+        _ -> {"Device.", false}
+      end
+
+    params =
+      case device_state do
+        nil ->
+          # Fallback: return minimal set
+          [%{name: "Device.DeviceInfo.", writable: false}]
+
+        state ->
+          # Use DeviceState to get parameter names
+          Caretaker.CPE.DeviceState.get_parameter_names(state, path, next_level)
+      end
+
+    with {:ok, body} <- Caretaker.TR069.RPC.GetParameterNamesResponse.encode(%{parameters: params}),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "GetParameterNames",
+        param_count: length(params),
+        next_level: next_level
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(acs_url, "GetRPCMethods", _rpc_xml, _device_id, _device_state, ns, timeout, id) do
+    # Return list of supported RPC methods
+    methods = [
+      "GetRPCMethods",
+      "GetParameterValues",
+      "GetParameterNames",
+      "SetParameterValues",
+      "Inform"
+    ]
+
+    response = %Caretaker.TR069.RPC.GetRPCMethodsResponse{methods: methods}
+
+    with {:ok, body} <- Caretaker.TR069.RPC.GetRPCMethodsResponse.encode(response),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "GetRPCMethods",
+        method_count: length(methods)
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
   defp respond_to_rpc(_acs_url, rpc, _rpc_xml, _device_id, _device_state, _ns, _timeout, _id) when is_binary(rpc) do
     :telemetry.execute([:caretaker, :cpe_client, :rpc, :unsupported], %{}, %{rpc: rpc})
     :ok

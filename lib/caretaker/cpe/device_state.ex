@@ -184,6 +184,24 @@ defmodule Caretaker.CPE.DeviceState do
     Agent.get(agent, & &1.device_id)
   end
 
+  @doc """
+  Get parameter names under a given path.
+
+  If next_level is true, returns only immediate children (partial paths).
+  If next_level is false, returns all descendant parameter names (full paths).
+
+  Returns list of %{name: String.t(), writable: boolean()} maps.
+  """
+  @spec get_parameter_names(Agent.agent(), String.t(), boolean()) :: [
+          %{name: String.t(), writable: boolean()}
+        ]
+  def get_parameter_names(agent, path, next_level \\ false) do
+    Agent.get(agent, fn state ->
+      tree = get_tree_by_path(state.params, path)
+      collect_parameter_names(tree, path, next_level)
+    end)
+  end
+
   # Private helpers
 
   defp get_by_path(params, path) do
@@ -237,4 +255,40 @@ defmodule Caretaker.CPE.DeviceState do
   defp infer_type(value) when is_boolean(value), do: "xsd:boolean"
   defp infer_type(value) when is_float(value), do: "xsd:double"
   defp infer_type(_value), do: "xsd:string"
+
+  # Collect parameter names with NextLevel support
+  defp collect_parameter_names(params, prefix, next_level) when is_map(params) do
+    clean_prefix = String.trim_trailing(prefix, ".")
+
+    if next_level do
+      # NextLevel=true: return only immediate children (partial paths)
+      params
+      |> Map.keys()
+      |> Enum.map(fn key ->
+        full_name = if clean_prefix == "", do: "#{key}.", else: "#{clean_prefix}.#{key}."
+        %{name: full_name, writable: true}
+      end)
+    else
+      # NextLevel=false: return all leaf parameters (full paths)
+      flatten_names(params, clean_prefix)
+    end
+  end
+
+  defp collect_parameter_names(_params, _prefix, _next_level), do: []
+
+  defp flatten_names(params, prefix) when is_map(params) do
+    Enum.flat_map(params, fn {key, value} ->
+      full_key = if prefix == "", do: key, else: "#{prefix}.#{key}"
+
+      case value do
+        %{} = nested when map_size(nested) > 0 ->
+          flatten_names(nested, full_key)
+
+        _scalar ->
+          [%{name: full_key, writable: true}]
+      end
+    end)
+  end
+
+  defp flatten_names(_params, _prefix), do: []
 end
