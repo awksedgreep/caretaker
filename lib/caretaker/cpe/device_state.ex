@@ -64,12 +64,14 @@ defmodule Caretaker.CPE.DeviceState do
     name = Keyword.get(opts, :name)
     firmware_simulator = Keyword.get(opts, :firmware_simulator)
 
+    dynamic_behavior = Keyword.get(opts, :dynamic_behavior)
+
     initial_state = %{
       device_id: device_id,
       params: params,
       attributes: %{},
       instance_numbers: %{},
-      options: %{firmware_simulator: firmware_simulator},
+      options: %{firmware_simulator: firmware_simulator, dynamic_behavior: dynamic_behavior},
       created_at: DateTime.utc_now()
     }
 
@@ -96,12 +98,26 @@ defmodule Caretaker.CPE.DeviceState do
   Set a parameter value by TR-181 path.
 
   Creates intermediate keys if needed.
+  If a dynamic_behavior is configured, it will be notified of the change.
   """
   @spec set(Agent.agent(), path(), value()) :: :ok
   def set(agent, path, value) when is_binary(path) do
-    Agent.update(agent, fn state ->
+    Agent.get_and_update(agent, fn state ->
+      old_value = get_by_path(state.params, path)
       updated_params = put_by_path(state.params, path, value)
-      %{state | params: updated_params}
+      new_state = %{state | params: updated_params}
+
+      # Notify dynamic behavior of change if configured
+      case state.options[:dynamic_behavior] do
+        nil -> :ok
+        pid when is_pid(pid) ->
+          if Process.alive?(pid) and old_value != value do
+            Caretaker.CPE.DynamicBehavior.record_change(pid, path, old_value, value)
+          end
+        _ -> :ok
+      end
+
+      {:ok, new_state}
     end)
   end
 
@@ -146,16 +162,40 @@ defmodule Caretaker.CPE.DeviceState do
   Update multiple parameters from a list of ParameterValueStruct maps.
 
   Each item should have :name and :value keys.
+  Notifies dynamic_behavior of changes if configured.
   """
   @spec update_parameters(Agent.agent(), [map()]) :: :ok
   def update_parameters(agent, params) when is_list(params) do
-    Agent.update(agent, fn state ->
+    Agent.get_and_update(agent, fn state ->
+      # Collect old values for change tracking
+      changes =
+        Enum.map(params, fn param ->
+          old_value = get_by_path(state.params, param.name)
+          {param.name, old_value, param.value}
+        end)
+
       updated_params =
         Enum.reduce(params, state.params, fn param, acc ->
           put_by_path(acc, param.name, param.value)
         end)
 
-      %{state | params: updated_params}
+      new_state = %{state | params: updated_params}
+
+      # Notify dynamic behavior of changes
+      case state.options[:dynamic_behavior] do
+        nil -> :ok
+        pid when is_pid(pid) ->
+          if Process.alive?(pid) do
+            Enum.each(changes, fn {path, old_val, new_val} ->
+              if old_val != new_val do
+                Caretaker.CPE.DynamicBehavior.record_change(pid, path, old_val, new_val)
+              end
+            end)
+          end
+        _ -> :ok
+      end
+
+      {:ok, new_state}
     end)
   end
 
