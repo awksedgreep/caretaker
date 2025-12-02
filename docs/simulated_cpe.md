@@ -110,16 +110,47 @@ Pre-defined JSON profiles for common device types:
 
 ---
 
-## Phase 2: Full RPC Support
+## Phase 2: Full RPC Support ⏳ IN PROGRESS
 
 **Goal:** Implement handlers for all commonly-used TR-069 RPCs with realistic behavior.
+
+**Status:** GetParameterNames and GetRPCMethods complete. All 117 tests passing.
+
+### TR-069 Spec Compliance ✅ VERIFIED
+
+The CPE client and ACS server interactions have been verified against TR-069 Amendment 6 (CWMP 1.4):
+
+#### SOAP/CWMP Envelope Compliance
+- ✅ **SOAP 1.1 Envelope**: Uses `http://schemas.xmlsoap.org/soap/envelope/` namespace
+- ✅ **CWMP Namespace**: Mirrors CPE's namespace in responses; defaults to `urn:dslforum-org:cwmp-1-0`
+- ✅ **CWMP ID Header**: Includes `cwmp:ID` with `mustUnderstand="1"`; echoes CPE's ID in responses
+- ✅ **Content-Type**: Uses `text/xml; charset=utf-8`
+
+#### Session Flow Compliance
+- ✅ **Session Initiation**: CPE sends Inform → ACS responds with InformResponse
+- ✅ **RPC Polling**: CPE sends empty POST to poll for queued ACS RPCs
+- ✅ **Session Termination**: ACS returns 204 No Content when no more RPCs
+- ✅ **Response Acknowledgment**: ACS returns 204 for CPE response messages
+
+#### Inform Structure Compliance
+- ✅ **DeviceId**: Includes Manufacturer, OUI, ProductClass, SerialNumber
+- ✅ **Event List**: EventStruct with EventCode and CommandKey
+- ✅ **MaxEnvelopes**: Properly formatted integer
+- ✅ **CurrentTime**: ISO8601 format
+- ✅ **RetryCount**: Session retry tracking
+
+#### RPC Compliance
+- ✅ **Response Correlation**: Uses same cwmp:ID from request in response
+- ✅ **Namespace Preservation**: Maintains CWMP namespace throughout session
+- ✅ **GetParameterNames**: Supports NextLevel=true (immediate children) and false (all leaves)
+- ✅ **GetRPCMethods**: Returns MethodList with supported methods
 
 ### Deliverables
 
 #### 2.1 Parameter RPCs
 - ✅ GetParameterValues (enhanced in Phase 1)
 - ✅ SetParameterValues (enhanced in Phase 1)
-- 🆕 GetParameterNames
+- ✅ GetParameterNames - **NEW: With NextLevel support**
 - 🆕 GetParameterAttributes
 - 🆕 SetParameterAttributes
 
@@ -128,23 +159,40 @@ Pre-defined JSON profiles for common device types:
 - 🆕 DeleteObject (remove instances)
 
 #### 2.3 Diagnostic RPCs
-- 🆕 GetRPCMethods (return list of supported RPCs)
+- ✅ GetRPCMethods - **NEW: Returns list of supported RPCs**
 
 #### 2.4 Response Behavior
-- Parse incoming RPC XML to extract parameters
-- Generate appropriate responses based on device state
-- Handle malformed requests gracefully
+- ✅ Parse incoming RPC XML to extract parameters
+- ✅ Generate appropriate responses based on device state
+- ✅ Handle malformed requests gracefully
+- ✅ ACS server handles all CPE response types (GPV, GPN, GRM, SPV responses)
 
-**Example Enhancements:**
+**Completed Implementations:**
+
 ```elixir
-# GetParameterNames with NextLevel support
-respond_to_rpc("GetParameterNames", %{path: "Device.IP.", next_level: true})
-# => Returns only Device.IP.Interface., Device.IP.Diagnostics., etc.
+# GetParameterNames with NextLevel support ✅
+respond_to_rpc("GetParameterNames", ...)
+# NextLevel=true → Returns immediate children (e.g., Device.IP.Interface.)
+# NextLevel=false → Returns all leaf parameters (full paths)
 
+# GetRPCMethods ✅
+respond_to_rpc("GetRPCMethods", ...)
+# Returns: ["GetRPCMethods", "GetParameterValues", "GetParameterNames", 
+#           "SetParameterValues", "Inform"]
+```
+
+**Example Enhancements (Remaining):**
+```elixir
 # AddObject creates new instance
 respond_to_rpc("AddObject", %{path: "Device.IP.Interface."})
 # => Creates Device.IP.Interface.3., returns instance number and status
 ```
+
+**Files Modified in Phase 2:**
+- `lib/caretaker/cpe/device_state.ex` - Added `get_parameter_names/3` with NextLevel support
+- `lib/caretaker/cpe/client.ex` - Added GetParameterNames and GetRPCMethods handlers
+- `lib/caretaker/acs/server.ex` - Added handlers for GetParameterNamesResponse, GetRPCMethodsResponse, SetParameterValuesResponse
+- `test/cpe_rpc_suite_test.exs` - 6 tests for new RPC handlers
 
 **Success Criteria:**
 - Support 10+ TR-069 RPCs with realistic behavior
