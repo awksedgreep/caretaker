@@ -1,0 +1,408 @@
+{
+  "Device": {
+    "DeviceInfo": {
+      "Manufacturer": "FiberVendor",
+      "ManufacturerOUI": "A1B2C3",
+      "ModelName": "GPON-ONU-1000X",
+      "Description": "GPON/XGS-PON Optical Network Terminal",
+      "ProductClass": "FiberONT",
+      "SerialNumber": "FON123456789",
+      "HardwareVersion": "2.0",
+      "SoftwareVersion": "3.2.1",
+      "ProvisioningCode": "",
+      "UpTime": 86400,
+      "FirstUseDate": "2024-01-15T10:30:00Z",
+      "ProcessStatus": {
+        "CPUUsage": 15
+      },
+      "MemoryStatus": {
+        "Total": 262144,
+        "Free": 131072
+      },
+      "VendorConfigFile": {
+        "1": {
+          "Name": "config.xml",
+          "Version": "1.0",
+          "Date": "2024-01-15T10:30:00Z",
+          "Description": "Default configuration"
+        }
+      }
+    },
+    "ManagementServer": {
+      "URL": "http://acs.example.com:7547/",
+      "Username": "cpe_user",
+      "Password": "",
+      "PeriodicInformEnable": true,
+      "PeriodicInformInterval": 300,
+      "PeriodicInformTime": "0001-01-01T00:00:00Z",
+      "ConnectionRequestURL": "http://192.168.1.1:7547/",
+      "ConnectionRequestUsername": "cpe_conn",
+      "ConnectionRequestPassword": ""
+    },
+    "Optical": {
+      "InterfaceNumberOfEntries": 1,
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "PON1",
+          "Name": "pon0",
+          "LowerLayers": "",
+          "Upstream": false,
+          "OpticalSignalLevel": -18.5,
+          "TransmitOpticalLevel": 2.3,
+          "LowerOpticalThreshold": -27.0,
+          "UpperOpticalThreshold": -8.0,
+          "LowerTransmitPowerThreshold": 0.5,
+          "UpperTransmitPowerThreshold": 4.0,
+          "Temperature": 45,
+          "Voltage": 3.3,
+          "Bias": 25.0,
+          "Stats": {
+            "BytesSent": 524288000,
+            "BytesReceived": 1048576000,
+            "PacketsSent": 1000000,
+            "PacketsReceived": 2000000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 12,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 3
+          }
+        }
+      }
+    },
+    "Ethernet": {
+      "InterfaceNumberOfEntries": 4,
+      "LinkNumberOfEntries": 0,
+      "VLANTerminationNumberOfEntries": 0,
+      "RMONStatsNumberOfEntries": 0,
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "eth1",
+          "Name": "eth0",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "AA:BB:CC:DD:EE:01",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Full",
+          "Stats": {
+            "BytesSent": 1048576,
+            "BytesReceived": 2097152,
+            "PacketsSent": 5000,
+            "PacketsReceived": 10000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 4950,
+            "UnicastPacketsReceived": 9950,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 50,
+            "MulticastPacketsReceived": 50,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "eth2",
+          "Name": "eth1",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "AA:BB:CC:DD:EE:02",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Full",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "3": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "eth3",
+          "Name": "eth2",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "AA:BB:CC:DD:EE:03",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "4": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "eth4",
+          "Name": "eth3",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "AA:BB:CC:DD:EE:04",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        }
+      }
+    },
+    "IP": {
+      "InterfaceNumberOfEntries": 1,
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "br0",
+          "Type": "Normal",
+          "IPv4Enable": true,
+          "IPv6Enable": false,
+          "IPv4AddressNumberOfEntries": 1,
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "192.168.1.100",
+              "SubnetMask": "255.255.255.0",
+              "AddressingType": "DHCP"
+            }
+          },
+          "Stats": {
+            "BytesSent": 1048576,
+            "BytesReceived": 2097152,
+            "PacketsSent": 5000,
+            "PacketsReceived": 10000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 4950,
+            "UnicastPacketsReceived": 9950,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 50,
+            "MulticastPacketsReceived": 50,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        }
+      }
+    },
+    "WiFi": {
+      "RadioNumberOfEntries": 2,
+      "SSIDNumberOfEntries": 2,
+      "AccessPointNumberOfEntries": 2,
+      "Radio": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "Radio1",
+          "Name": "wlan0",
+          "SupportedFrequencyBands": "2.4GHz",
+          "OperatingFrequencyBand": "2.4GHz",
+          "SupportedStandards": "b,g,n,ax",
+          "OperatingStandards": "n,ax",
+          "PossibleChannels": "1-11",
+          "Channel": 6,
+          "AutoChannelEnable": false,
+          "TransmitPower": 100,
+          "TransmitPowerSupported": "0,25,50,75,100",
+          "IEEE80211hSupported": false,
+          "IEEE80211hEnabled": false,
+          "ChannelsInUse": "6",
+          "Stats": {
+            "BytesSent": 52428800,
+            "BytesReceived": 104857600,
+            "PacketsSent": 100000,
+            "PacketsReceived": 200000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 5,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 2
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "Radio2",
+          "Name": "wlan1",
+          "SupportedFrequencyBands": "5GHz",
+          "OperatingFrequencyBand": "5GHz",
+          "SupportedStandards": "a,n,ac,ax",
+          "OperatingStandards": "ac,ax",
+          "PossibleChannels": "36,40,44,48,149,153,157,161,165",
+          "Channel": 149,
+          "AutoChannelEnable": false,
+          "TransmitPower": 100,
+          "TransmitPowerSupported": "0,25,50,75,100",
+          "IEEE80211hSupported": true,
+          "IEEE80211hEnabled": false,
+          "ChannelsInUse": "149",
+          "Stats": {
+            "BytesSent": 104857600,
+            "BytesReceived": 209715200,
+            "PacketsSent": 200000,
+            "PacketsReceived": 400000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 3,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 1
+          }
+        }
+      },
+      "SSID": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "SSID1",
+          "Name": "wlan0",
+          "BSSID": "AA:BB:CC:DD:EE:F0",
+          "MACAddress": "AA:BB:CC:DD:EE:F0",
+          "SSID": "HomeNetwork-2.4G",
+          "Stats": {
+            "BytesSent": 52428800,
+            "BytesReceived": 104857600,
+            "PacketsSent": 100000,
+            "PacketsReceived": 200000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 5,
+            "UnicastPacketsSent": 99000,
+            "UnicastPacketsReceived": 199000,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 2,
+            "MulticastPacketsSent": 1000,
+            "MulticastPacketsReceived": 1000,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "SSID2",
+          "Name": "wlan1",
+          "BSSID": "AA:BB:CC:DD:EE:F1",
+          "MACAddress": "AA:BB:CC:DD:EE:F1",
+          "SSID": "HomeNetwork-5G",
+          "Stats": {
+            "BytesSent": 104857600,
+            "BytesReceived": 209715200,
+            "PacketsSent": 200000,
+            "PacketsReceived": 400000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 3,
+            "UnicastPacketsSent": 198000,
+            "UnicastPacketsReceived": 398000,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 1,
+            "MulticastPacketsSent": 2000,
+            "MulticastPacketsReceived": 2000,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        }
+      }
+    },
+    "Bridging": {
+      "BridgeNumberOfEntries": 1,
+      "Bridge": {
+        "1": {
+          "Enable": true,
+          "Status": "Enabled",
+          "Alias": "Bridge1",
+          "Standard": "802.1Q-2011",
+          "PortNumberOfEntries": 5,
+          "VLANNumberOfEntries": 2,
+          "VLAN": {
+            "1": {
+              "Enable": true,
+              "Alias": "VLAN1",
+              "Name": "DefaultVLAN",
+              "VLANID": 1
+            },
+            "2": {
+              "Enable": true,
+              "Alias": "VLAN100",
+              "Name": "ManagementVLAN",
+              "VLANID": 100
+            }
+          }
+        }
+      }
+    },
+    "QoS": {
+      "MaxClassificationEntries": 16,
+      "ClassificationNumberOfEntries": 1,
+      "MaxAppEntries": 32,
+      "AppNumberOfEntries": 0,
+      "MaxFlowEntries": 32,
+      "FlowNumberOfEntries": 0,
+      "MaxPolicerEntries": 8,
+      "PolicerNumberOfEntries": 0,
+      "MaxQueueEntries": 8,
+      "QueueNumberOfEntries": 4,
+      "QueueStatsNumberOfEntries": 4,
+      "ShaperNumberOfEntries": 1
+    },
+    "X_VENDOR_PON": {
+      "ONUID": "15",
+      "RegistrationState": "Operational_O5",
+      "RegistrationID": "01020304050607080910",
+      "LoidAuth": false,
+      "LoidAuthStatus": "Disabled",
+      "OLTVendorID": "HUAW",
+      "OLTModel": "MA5800-X7",
+      "OLTSerialNumber": "2102311ABC0001",
+      "ONUState": "up",
+      "OpticalDDMSupport": true,
+      "FECMode": "Enable",
+      "FECStatus": "Active",
+      "EncryptionMode": "AES",
+      "EncryptionStatus": "Active",
+      "BERThreshold": "1e-4",
+      "CurrentBER": "1e-9"
+    }
+  }
+}

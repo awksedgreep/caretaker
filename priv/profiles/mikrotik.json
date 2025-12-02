@@ -1,0 +1,493 @@
+{
+  "Device": {
+    "DeviceInfo": {
+      "Manufacturer": "MikroTik",
+      "ManufacturerOUI": "D4CA6D",
+      "ModelName": "RB4011iGS+",
+      "Description": "MikroTik RouterBOARD 4011 10-Port Gigabit Router",
+      "ProductClass": "RouterOS",
+      "SerialNumber": "A1B2C3D4E5F6",
+      "HardwareVersion": "r2",
+      "SoftwareVersion": "7.12.1",
+      "ProvisioningCode": "",
+      "UpTime": 259200,
+      "FirstUseDate": "2024-01-05T12:00:00Z",
+      "ProcessStatus": {
+        "CPUUsage": 8
+      },
+      "MemoryStatus": {
+        "Total": 1048576,
+        "Free": 524288
+      },
+      "X_MIKROTIK_BoardName": "RB4011iGS+",
+      "X_MIKROTIK_Architecture": "arm",
+      "X_MIKROTIK_CPUCount": 4,
+      "X_MIKROTIK_CPUFrequency": "1400MHz",
+      "X_MIKROTIK_License": "6",
+      "X_MIKROTIK_FactoryFirmware": "6.45.1",
+      "X_MIKROTIK_CurrentFirmware": "7.12.1"
+    },
+    "ManagementServer": {
+      "URL": "http://acs.example.com:7547/",
+      "Username": "mikrotik_user",
+      "Password": "",
+      "PeriodicInformEnable": true,
+      "PeriodicInformInterval": 900,
+      "PeriodicInformTime": "0001-01-01T00:00:00Z",
+      "ConnectionRequestURL": "http://10.0.0.1:7547/",
+      "ConnectionRequestUsername": "mikrotik_conn",
+      "ConnectionRequestPassword": ""
+    },
+    "Ethernet": {
+      "InterfaceNumberOfEntries": 10,
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "ether1-wan",
+          "Name": "ether1",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": true,
+          "MACAddress": "D4:CA:6D:11:22:01",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Full",
+          "Stats": {
+            "BytesSent": 104857600,
+            "BytesReceived": 524288000,
+            "PacketsSent": 500000,
+            "PacketsReceived": 2500000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 3,
+            "UnicastPacketsSent": 495000,
+            "UnicastPacketsReceived": 2490000,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 10,
+            "MulticastPacketsSent": 5000,
+            "MulticastPacketsReceived": 10000,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "ether2",
+          "Name": "ether2",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:02",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Full",
+          "Stats": {
+            "BytesSent": 52428800,
+            "BytesReceived": 10485760,
+            "PacketsSent": 250000,
+            "PacketsReceived": 50000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 249000,
+            "UnicastPacketsReceived": 49500,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 1000,
+            "MulticastPacketsReceived": 500,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "3": {
+          "Enable": true,
+          "Status": "Up",
+          "Alias": "ether3",
+          "Name": "ether3",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:03",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Full",
+          "Stats": {
+            "BytesSent": 10485760,
+            "BytesReceived": 2097152,
+            "PacketsSent": 50000,
+            "PacketsReceived": 10000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 49800,
+            "UnicastPacketsReceived": 9980,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 200,
+            "MulticastPacketsReceived": 20,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "4": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether4",
+          "Name": "ether4",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:04",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "5": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether5",
+          "Name": "ether5",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:05",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "6": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether6",
+          "Name": "ether6",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:06",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "7": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether7",
+          "Name": "ether7",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:07",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "8": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether8",
+          "Name": "ether8",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:08",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "9": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether9",
+          "Name": "ether9",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:09",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "10": {
+          "Enable": true,
+          "Status": "Down",
+          "Alias": "ether10",
+          "Name": "ether10",
+          "LastChange": 0,
+          "LowerLayers": "",
+          "Upstream": false,
+          "MACAddress": "D4:CA:6D:11:22:0A",
+          "MaxBitRate": 1000,
+          "DuplexMode": "Auto",
+          "Stats": {
+            "BytesSent": 0,
+            "BytesReceived": 0,
+            "PacketsSent": 0,
+            "PacketsReceived": 0,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 0,
+            "UnicastPacketsReceived": 0,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 0,
+            "MulticastPacketsReceived": 0,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        }
+      }
+    },
+    "IP": {
+      "InterfaceNumberOfEntries": 2,
+      "Interface": {
+        "1": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "bridge",
+          "Type": "Normal",
+          "IPv4Enable": true,
+          "IPv6Enable": false,
+          "IPv4AddressNumberOfEntries": 1,
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "192.168.88.1",
+              "SubnetMask": "255.255.255.0",
+              "AddressingType": "Static"
+            }
+          },
+          "Stats": {
+            "BytesSent": 52428800,
+            "BytesReceived": 10485760,
+            "PacketsSent": 250000,
+            "PacketsReceived": 50000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 0,
+            "UnicastPacketsSent": 249000,
+            "UnicastPacketsReceived": 49500,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 0,
+            "MulticastPacketsSent": 1000,
+            "MulticastPacketsReceived": 500,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        },
+        "2": {
+          "Enable": true,
+          "Status": "Up",
+          "Name": "ether1",
+          "Type": "Normal",
+          "IPv4Enable": true,
+          "IPv6Enable": false,
+          "IPv4AddressNumberOfEntries": 1,
+          "IPv4Address": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "IPAddress": "10.0.0.100",
+              "SubnetMask": "255.255.255.0",
+              "AddressingType": "DHCP"
+            }
+          },
+          "Stats": {
+            "BytesSent": 104857600,
+            "BytesReceived": 524288000,
+            "PacketsSent": 500000,
+            "PacketsReceived": 2500000,
+            "ErrorsSent": 0,
+            "ErrorsReceived": 3,
+            "UnicastPacketsSent": 495000,
+            "UnicastPacketsReceived": 2490000,
+            "DiscardPacketsSent": 0,
+            "DiscardPacketsReceived": 10,
+            "MulticastPacketsSent": 5000,
+            "MulticastPacketsReceived": 10000,
+            "BroadcastPacketsSent": 0,
+            "BroadcastPacketsReceived": 0
+          }
+        }
+      }
+    },
+    "Routing": {
+      "RouterNumberOfEntries": 1,
+      "Router": {
+        "1": {
+          "Enable": true,
+          "Status": "Enabled",
+          "Alias": "DefaultRouter",
+          "IPv4ForwardingNumberOfEntries": 2,
+          "IPv4Forwarding": {
+            "1": {
+              "Enable": true,
+              "Status": "Enabled",
+              "Alias": "DefaultRoute",
+              "DestIPAddress": "0.0.0.0",
+              "DestSubnetMask": "0.0.0.0",
+              "GatewayIPAddress": "10.0.0.1",
+              "Interface": "Device.IP.Interface.2",
+              "Origin": "Static",
+              "Metric": 1
+            },
+            "2": {
+              "Enable": true,
+              "Status": "Enabled",
+              "Alias": "LANRoute",
+              "DestIPAddress": "192.168.88.0",
+              "DestSubnetMask": "255.255.255.0",
+              "GatewayIPAddress": "",
+              "Interface": "Device.IP.Interface.1",
+              "Origin": "Static",
+              "Metric": 0
+            }
+          }
+        }
+      }
+    },
+    "NAT": {
+      "InterfaceSettingNumberOfEntries": 1,
+      "PortMappingNumberOfEntries": 0,
+      "InterfaceSetting": {
+        "1": {
+          "Enable": true,
+          "Status": "Enabled",
+          "Alias": "WAN_NAT",
+          "Interface": "Device.IP.Interface.2"
+        }
+      }
+    },
+    "Firewall": {
+      "Level": "High",
+      "Config": "Custom",
+      "AdvancedLevel": "Custom",
+      "Type": "Stateful",
+      "X_MIKROTIK_RuleCount": 25,
+      "X_MIKROTIK_ConnectionCount": 1543,
+      "X_MIKROTIK_ConnectionLimit": 16384
+    },
+    "DHCPv4": {
+      "ServerNumberOfEntries": 1,
+      "Server": {
+        "1": {
+          "Enable": true,
+          "Status": "Enabled",
+          "Alias": "LAN_DHCP",
+          "Interface": "Device.IP.Interface.1",
+          "MinAddress": "192.168.88.10",
+          "MaxAddress": "192.168.88.254",
+          "SubnetMask": "255.255.255.0",
+          "DNSServers": "1.1.1.1,8.8.8.8",
+          "DomainName": "lan",
+          "IPRouters": "192.168.88.1",
+          "LeaseTime": 86400
+        }
+      }
+    },
+    "X_MIKROTIK_System": {
+      "Identity": "MikroTik",
+      "Note": "Managed via TR-069",
+      "Clock": {
+        "TimeZone": "UTC",
+        "NTPEnabled": true,
+        "NTPServers": "time.cloudflare.com,pool.ntp.org"
+      },
+      "Logging": {
+        "MemoryLines": 1000,
+        "DiskLines": 10000,
+        "RemoteSyslog": ""
+      },
+      "Watchdog": {
+        "Enabled": true,
+        "AutoReboot": true,
+        "RebootOnFailure": true
+      }
+    }
+  }
+}
