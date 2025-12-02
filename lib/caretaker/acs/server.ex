@@ -148,6 +148,36 @@ defmodule Caretaker.ACS.Server do
                   |> Plug.Conn.send_resp(400, "Bad Request")
               end
 
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "GetParameterNamesResponse"}
+             }} ->
+              # Acknowledge receipt of GetParameterNamesResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "GetRPCMethodsResponse"}
+             }} ->
+              # Acknowledge receipt of GetRPCMethodsResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "SetParameterValuesResponse"}
+             }} ->
+              # Acknowledge receipt of SetParameterValuesResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
             _other ->
               conn
               |> Plug.Conn.put_resp_header("content-type", "text/plain")

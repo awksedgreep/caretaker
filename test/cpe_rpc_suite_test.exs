@@ -17,6 +17,7 @@ defmodule Caretaker.CPE.RPCSuiteTest do
 
     # Create device state with profile
     device_id = %{
+      manufacturer: "Caretaker",
       oui: "000000",
       product_class: "CaretakerCPE",
       serial_number: "000000"
@@ -47,21 +48,22 @@ defmodule Caretaker.CPE.RPCSuiteTest do
           nil
         )
 
+      # Get device_id from state (must match what Client will use)
+      device_id = DeviceState.device_id(ctx.device_state)
+      dev_key = {device_id.oui, device_id.product_class, device_id.serial_number}
+
       # Manually upsert session first
-      device_id = %{oui: "000000", product_class: "CaretakerCPE", serial_number: "000000"}
-      Caretaker.ACS.Session.upsert({"000000", "CaretakerCPE", "000000"}, device_id, "urn:dslforum-org:cwmp-1-0")
+      Caretaker.ACS.Session.upsert(dev_key, device_id, "urn:dslforum-org:cwmp-1-0")
 
       # Enqueue GetParameterNames with NextLevel=true
       {:ok, gpn_body} =
         Caretaker.TR069.RPC.GetParameterNames.new("Device.", true)
         |> Caretaker.TR069.RPC.GetParameterNames.encode()
 
-      Caretaker.ACS.Session.queue_command(
-        {"000000", "CaretakerCPE", "000000"},
-        gpn_body
-      )
+      Caretaker.ACS.Session.queue_command(dev_key, gpn_body)
 
-      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state)
+      # Pass device_id to ensure Inform uses the same identity
+      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
 
       # Skip auto-queued GetParameterValues (there might be 2 - one from upsert, one from Inform)
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
@@ -84,21 +86,22 @@ defmodule Caretaker.CPE.RPCSuiteTest do
           nil
         )
 
+      # Get device_id from state (must match what Client will use)
+      device_id = DeviceState.device_id(ctx.device_state)
+      dev_key = {device_id.oui, device_id.product_class, device_id.serial_number}
+
       # Manually upsert session first
-      device_id = %{oui: "000000", product_class: "CaretakerCPE", serial_number: "000000"}
-      Caretaker.ACS.Session.upsert({"000000", "CaretakerCPE", "000000"}, device_id, "urn:dslforum-org:cwmp-1-0")
+      Caretaker.ACS.Session.upsert(dev_key, device_id, "urn:dslforum-org:cwmp-1-0")
 
       # Enqueue GetParameterNames with NextLevel=false
       {:ok, gpn_body} =
         Caretaker.TR069.RPC.GetParameterNames.new("Device.DeviceInfo.", false)
         |> Caretaker.TR069.RPC.GetParameterNames.encode()
 
-      Caretaker.ACS.Session.queue_command(
-        {"000000", "CaretakerCPE", "000000"},
-        gpn_body
-      )
+      Caretaker.ACS.Session.queue_command(dev_key, gpn_body)
 
-      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state)
+      # Pass device_id to ensure Inform uses the same identity
+      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
 
       # Skip the auto-queued GetParameterValues
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
@@ -126,21 +129,22 @@ defmodule Caretaker.CPE.RPCSuiteTest do
           nil
         )
 
+      # Get device_id from state (must match what Client will use)
+      device_id = DeviceState.device_id(ctx.device_state)
+      dev_key = {device_id.oui, device_id.product_class, device_id.serial_number}
+
       # Manually upsert session first
-      device_id = %{oui: "000000", product_class: "CaretakerCPE", serial_number: "000000"}
-      Caretaker.ACS.Session.upsert({"000000", "CaretakerCPE", "000000"}, device_id, "urn:dslforum-org:cwmp-1-0")
+      Caretaker.ACS.Session.upsert(dev_key, device_id, "urn:dslforum-org:cwmp-1-0")
 
       # Enqueue GetRPCMethods
       {:ok, grm_body} =
         %Caretaker.TR069.RPC.GetRPCMethods{}
         |> Caretaker.TR069.RPC.GetRPCMethods.encode()
 
-      Caretaker.ACS.Session.queue_command(
-        {"000000", "CaretakerCPE", "000000"},
-        grm_body
-      )
+      Caretaker.ACS.Session.queue_command(dev_key, grm_body)
 
-      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state)
+      # Pass device_id to ensure Inform uses the same identity
+      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
 
       # Skip the auto-queued GetParameterValues
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
