@@ -30,4 +30,23 @@ defmodule Caretaker.TR069.RPC.AddObject do
        "</cwmp:AddObject>"
      ]}
   end
+
+  @doc "Decode body element from XML"
+  @spec decode(binary()) :: {:ok, t()} | {:error, term()}
+  def decode(xml) when is_binary(xml) do
+    try do
+      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
+      with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
+        root = parsed["root"] || %{}
+        node = root["cwmp:AddObject"] || root["AddObject"] || %{}
+        object_name = node["ObjectName"] || ""
+        parameter_key = node["ParameterKey"] || ""
+
+        {:ok, %__MODULE__{object_name: object_name, parameter_key: parameter_key}}
+      end
+    rescue
+      e -> {:error, {:decode_failed, e}}
+    end
+  end
 end

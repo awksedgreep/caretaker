@@ -296,7 +296,11 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
       "GetRPCMethods",
       "GetParameterValues",
       "GetParameterNames",
+      "GetParameterAttributes",
       "SetParameterValues",
+      "SetParameterAttributes",
+      "AddObject",
+      "DeleteObject",
       "Inform"
     ]
 
@@ -310,6 +314,160 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
         cwmp_ns: ns,
         rpc: "GetRPCMethods",
         method_count: length(methods)
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(acs_url, "GetParameterAttributes", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse GetParameterAttributes RPC to extract parameter names
+    paths =
+      case Caretaker.TR069.RPC.GetParameterAttributes.decode(rpc_xml) do
+        {:ok, %{names: names}} -> names
+        _ -> []
+      end
+
+    params =
+      case device_state do
+        nil ->
+          # Fallback: return minimal attributes
+          Enum.map(paths, fn p -> %{name: p, notification: 0, access_list: ["Subscriber"]} end)
+
+        state ->
+          Caretaker.CPE.DeviceState.get_parameter_attributes(state, paths)
+      end
+
+    with {:ok, body} <- Caretaker.TR069.RPC.GetParameterAttributesResponse.encode(%{parameters: params}),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "GetParameterAttributes",
+        param_count: length(params)
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(acs_url, "SetParameterAttributes", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse SetParameterAttributes RPC
+    attrs =
+      case Caretaker.TR069.RPC.SetParameterAttributes.decode(rpc_xml) do
+        {:ok, %{parameters: params}} -> params
+        _ -> []
+      end
+
+    case device_state do
+      nil -> :ok
+      state when attrs != [] ->
+        Caretaker.CPE.DeviceState.set_parameter_attributes(state, attrs)
+
+        :telemetry.execute([:caretaker, :cpe_client, :attrs, :updated], %{}, %{
+          count: length(attrs)
+        })
+
+      _ -> :ok
+    end
+
+    response = %Caretaker.TR069.RPC.SetParameterAttributesResponse{}
+
+    with {:ok, body} <- Caretaker.TR069.RPC.SetParameterAttributesResponse.encode(response),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "SetParameterAttributes"
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(acs_url, "AddObject", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse AddObject RPC
+    {object_path, _param_key} =
+      case Caretaker.TR069.RPC.AddObject.decode(rpc_xml) do
+        {:ok, %{object_name: name, parameter_key: key}} -> {name, key}
+        _ -> {"", ""}
+      end
+
+    {instance_number, status} =
+      case device_state do
+        nil ->
+          # Fallback: return a fake instance number
+          {1, 0}
+
+        state ->
+          case Caretaker.CPE.DeviceState.add_object_instance(state, object_path) do
+            {:ok, inst} -> {inst, 0}
+            {:error, _} -> {0, 1}
+          end
+      end
+
+    with {:ok, body} <- Caretaker.TR069.RPC.AddObjectResponse.encode(%{instance_number: instance_number, status: status}),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "AddObject",
+        object_path: object_path,
+        instance_number: instance_number
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(acs_url, "DeleteObject", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse DeleteObject RPC
+    {object_path, _param_key} =
+      case Caretaker.TR069.RPC.DeleteObject.decode(rpc_xml) do
+        {:ok, %{object_name: name, parameter_key: key}} -> {name, key}
+        _ -> {"", ""}
+      end
+
+    status =
+      case device_state do
+        nil ->
+          # Fallback: return success
+          0
+
+        state ->
+          case Caretaker.CPE.DeviceState.delete_object_instance(state, object_path) do
+            :ok -> 0
+            {:error, :not_found} -> 1
+          end
+      end
+
+    with {:ok, body} <- Caretaker.TR069.RPC.DeleteObjectResponse.encode(%{status: status}),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "DeleteObject",
+        object_path: object_path
       })
 
       :ok

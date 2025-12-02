@@ -178,6 +178,46 @@ defmodule Caretaker.ACS.Server do
               |> Plug.Conn.put_resp_header("content-type", "text/plain")
               |> Plug.Conn.send_resp(204, "")
 
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "GetParameterAttributesResponse"}
+             }} ->
+              # Acknowledge receipt of GetParameterAttributesResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "SetParameterAttributesResponse"}
+             }} ->
+              # Acknowledge receipt of SetParameterAttributesResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "AddObjectResponse"}
+             }} ->
+              # Acknowledge receipt of AddObjectResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "DeleteObjectResponse"}
+             }} ->
+              # Acknowledge receipt of DeleteObjectResponse
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
             _other ->
               conn
               |> Plug.Conn.put_resp_header("content-type", "text/plain")

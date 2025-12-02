@@ -65,6 +65,8 @@ defmodule Caretaker.CPE.DeviceState do
     initial_state = %{
       device_id: device_id,
       params: params,
+      attributes: %{},
+      instance_numbers: %{},
       created_at: DateTime.utc_now()
     }
 
@@ -199,6 +201,150 @@ defmodule Caretaker.CPE.DeviceState do
     Agent.get(agent, fn state ->
       tree = get_tree_by_path(state.params, path)
       collect_parameter_names(tree, path, next_level)
+    end)
+  end
+
+  @doc """
+  Get parameter attributes for a list of paths.
+
+  Returns list of %{name: String.t(), notification: integer(), access_list: [String.t()]} maps.
+  Default notification is 0 (off), default access_list is ["Subscriber"].
+  """
+  @spec get_parameter_attributes(Agent.agent(), [String.t()]) :: [
+          %{name: String.t(), notification: integer(), access_list: [String.t()]}
+        ]
+  def get_parameter_attributes(agent, paths) when is_list(paths) do
+    Agent.get(agent, fn state ->
+      Enum.flat_map(paths, fn path ->
+        # Expand path to include all parameters under it if path ends with "."
+        param_paths =
+          if String.ends_with?(path, ".") do
+            tree = get_tree_by_path(state.params, path)
+            flatten_names(tree, String.trim_trailing(path, "."))
+            |> Enum.map(& &1.name)
+          else
+            [path]
+          end
+
+        Enum.map(param_paths, fn p ->
+          attrs = Map.get(state.attributes, p, %{notification: 0, access_list: ["Subscriber"]})
+          %{name: p, notification: attrs.notification, access_list: attrs.access_list}
+        end)
+      end)
+    end)
+  end
+
+  @doc """
+  Set parameter attributes for a list of attribute changes.
+
+  Each item should have: name, notification_change, notification, access_list_change, access_list.
+  Only updates the attributes where the corresponding *_change flag is true.
+  """
+  @spec set_parameter_attributes(Agent.agent(), [map()]) :: :ok
+  def set_parameter_attributes(agent, attrs) when is_list(attrs) do
+    Agent.update(agent, fn state ->
+      updated_attrs =
+        Enum.reduce(attrs, state.attributes, fn attr, acc ->
+          current = Map.get(acc, attr.name, %{notification: 0, access_list: ["Subscriber"]})
+
+          new_attrs = %{
+            notification:
+              if(attr.notification_change, do: attr.notification, else: current.notification),
+            access_list:
+              if(attr.access_list_change, do: attr.access_list, else: current.access_list)
+          }
+
+          Map.put(acc, attr.name, new_attrs)
+        end)
+
+      %{state | attributes: updated_attrs}
+    end)
+  end
+
+  @doc """
+  Add a new object instance under the given path.
+
+  The path should be a multi-instance object path ending with a dot (e.g., "Device.IP.Interface.").
+  Returns {:ok, instance_number} with the newly created instance number.
+  """
+  @spec add_object_instance(Agent.agent(), String.t()) :: {:ok, integer()}
+  def add_object_instance(agent, object_path) do
+    Agent.get_and_update(agent, fn state ->
+      clean_path = String.trim_trailing(object_path, ".")
+
+      # Get current instance number for this path, default to 0
+      current = Map.get(state.instance_numbers, clean_path, 0)
+      new_instance = current + 1
+
+      # Create the instance path (e.g., "Device.IP.Interface.1")
+      instance_path = "#{clean_path}.#{new_instance}"
+
+      # Create empty instance node in params
+      updated_params = put_by_path(state.params, instance_path, %{})
+
+      # Update instance counter
+      updated_instances = Map.put(state.instance_numbers, clean_path, new_instance)
+
+      new_state = %{state | params: updated_params, instance_numbers: updated_instances}
+      {{:ok, new_instance}, new_state}
+    end)
+  end
+
+  @doc """
+  Delete an object instance at the given path.
+
+  The path should be a specific instance path (e.g., "Device.IP.Interface.1.").
+  Returns :ok on success, {:error, :not_found} if the instance doesn't exist.
+  """
+  @spec delete_object_instance(Agent.agent(), String.t()) :: :ok | {:error, :not_found}
+  def delete_object_instance(agent, object_path) do
+    Agent.get_and_update(agent, fn state ->
+      clean_path = String.trim_trailing(object_path, ".")
+      keys = String.split(clean_path, ".", trim: true)
+
+      # Check if the path exists
+      current_value = get_by_path(state.params, clean_path)
+
+      if current_value != nil do
+        # Remove the instance by deleting the key from the parent
+        {parent_keys, [instance_key]} = Enum.split(keys, -1)
+        parent_path = Enum.join(parent_keys, ".")
+
+        updated_params =
+          if parent_path == "" do
+            Map.delete(state.params, instance_key)
+          else
+            parent = get_by_path(state.params, parent_path) || %{}
+            updated_parent = Map.delete(parent, instance_key)
+            put_by_path(state.params, parent_path, updated_parent)
+          end
+
+        # Also clean up any attributes for parameters under this instance
+        prefix = "#{clean_path}."
+
+        updated_attrs =
+          state.attributes
+          |> Enum.reject(fn {k, _v} -> String.starts_with?(k, prefix) || k == clean_path end)
+          |> Map.new()
+
+        new_state = %{state | params: updated_params, attributes: updated_attrs}
+        {:ok, new_state}
+      else
+        {{:error, :not_found}, state}
+      end
+    end)
+  end
+
+  @doc """
+  Get the next available instance number for a multi-instance object path.
+
+  Returns the next instance number that would be assigned (current max + 1).
+  """
+  @spec get_next_instance_number(Agent.agent(), String.t()) :: integer()
+  def get_next_instance_number(agent, object_path) do
+    Agent.get(agent, fn state ->
+      clean_path = String.trim_trailing(object_path, ".")
+      Map.get(state.instance_numbers, clean_path, 0) + 1
     end)
   end
 
