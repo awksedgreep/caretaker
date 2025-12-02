@@ -55,18 +55,21 @@ defmodule Caretaker.CPE.DeviceState do
   - `device_id` - Device identification (required)
   - `params` - Initial parameter tree (default: empty map)
   - `name` - Optional agent name (default: no name)
+  - `firmware_simulator` - Optional FirmwareSimulator agent pid
   """
   @spec start_link(keyword()) :: Agent.on_start()
   def start_link(opts) do
     device_id = Keyword.fetch!(opts, :device_id)
     params = Keyword.get(opts, :params, %{})
     name = Keyword.get(opts, :name)
+    firmware_simulator = Keyword.get(opts, :firmware_simulator)
 
     initial_state = %{
       device_id: device_id,
       params: params,
       attributes: %{},
       instance_numbers: %{},
+      options: %{firmware_simulator: firmware_simulator},
       created_at: DateTime.utc_now()
     }
 
@@ -184,6 +187,30 @@ defmodule Caretaker.CPE.DeviceState do
   @spec device_id(Agent.agent()) :: device_id()
   def device_id(agent) do
     Agent.get(agent, & &1.device_id)
+  end
+
+  @doc """
+  Get an option value from state.
+  """
+  @spec get_option(Agent.agent(), atom()) :: {:ok, term()} | :error
+  def get_option(agent, key) when is_atom(key) do
+    Agent.get(agent, fn state ->
+      case Map.fetch(state.options, key) do
+        {:ok, nil} -> :error
+        {:ok, value} -> {:ok, value}
+        :error -> :error
+      end
+    end)
+  end
+
+  @doc """
+  Set an option value in state.
+  """
+  @spec set_option(Agent.agent(), atom(), term()) :: :ok
+  def set_option(agent, key, value) when is_atom(key) do
+    Agent.update(agent, fn state ->
+      %{state | options: Map.put(state.options, key, value)}
+    end)
   end
 
   @doc """

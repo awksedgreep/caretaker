@@ -4,6 +4,7 @@ defmodule Caretaker.CPE.Client do
   - Sends Inform to the ACS
   - Awaits InformResponse
   - Sends an empty POST to fetch the next queued RPC (e.g., GetParameterValues)
+  - Supports firmware upgrade simulation via FirmwareSimulator
 
   This module uses Finch for HTTP. Ensure a Finch supervisor is running:
     {Finch, name: Caretaker.Finch}
@@ -12,6 +13,7 @@ defmodule Caretaker.CPE.Client do
   require Logger
   alias Caretaker.CWMP.SOAP
   alias Caretaker.TR069.RPC.Inform
+  alias Caretaker.CPE.FirmwareSimulator
 
   @default_timeout 5_000
   @default_backoff 200
@@ -301,6 +303,8 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
       "SetParameterAttributes",
       "AddObject",
       "DeleteObject",
+      "Download",
+      "Reboot",
       "Inform"
     ]
 
@@ -478,10 +482,122 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     end
   end
 
+  defp respond_to_rpc(acs_url, "Download", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse Download RPC
+    download =
+      case Caretaker.TR069.RPC.Download.decode(rpc_xml) do
+        {:ok, d} -> d
+        _ -> %{command_key: "", file_type: "", url: "", delay_seconds: 0}
+      end
+
+    # Get firmware simulator from device_state if available
+    firmware_sim = get_firmware_simulator(device_state)
+
+    # Start download if we have a firmware simulator
+    {status, start_time, complete_time} =
+      case firmware_sim do
+        nil ->
+          # No simulator - return immediate success (status 0)
+          now = DateTime.to_iso8601(DateTime.utc_now())
+          {0, now, now}
+
+        sim ->
+          # Start async download (status 1 = download will be performed async)
+          case FirmwareSimulator.start_download(sim, %{
+                 url: download.url,
+                 command_key: download.command_key,
+                 file_type: download.file_type
+               }) do
+            {:ok, :downloading} ->
+              # Async download started
+              {1, "0001-01-01T00:00:00Z", "0001-01-01T00:00:00Z"}
+
+            {:error, _reason} ->
+              # Failed to start, return error status
+              now = DateTime.to_iso8601(DateTime.utc_now())
+              {9001, now, now}
+          end
+      end
+
+    response =
+      Caretaker.TR069.RPC.DownloadResponse.new(
+        status: status,
+        start_time: start_time,
+        complete_time: complete_time
+      )
+
+    with {:ok, body} <- Caretaker.TR069.RPC.DownloadResponse.encode(response),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "Download",
+        command_key: download.command_key,
+        status: status
+      })
+
+      :ok
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :ok
+    end
+  end
+
+  defp respond_to_rpc(acs_url, "Reboot", rpc_xml, _device_id, device_state, ns, timeout, id) do
+    # Parse Reboot RPC
+    _reboot =
+      case Caretaker.TR069.RPC.Reboot.decode(rpc_xml) do
+        {:ok, r} -> r
+        _ -> %{command_key: ""}
+      end
+
+    # Get firmware simulator from device_state if available
+    firmware_sim = get_firmware_simulator(device_state)
+
+    # Start reboot if we have a firmware simulator
+    case firmware_sim do
+      nil -> :ok
+      sim -> FirmwareSimulator.start_reboot(sim)
+    end
+
+    response = Caretaker.TR069.RPC.RebootResponse.new()
+
+    with {:ok, body} <- Caretaker.TR069.RPC.RebootResponse.encode(response),
+         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
+         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
+      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
+        acs_url: acs_url,
+        cwmp_ns: ns,
+        rpc: "Reboot"
+      })
+
+      # Return :reboot to signal session should end
+      :reboot
+    else
+      {:ok, %{status: status}} -> {:error, {:http, status}}
+      {:error, reason} -> {:error, reason}
+      _ -> :reboot
+    end
+  end
+
   defp respond_to_rpc(_acs_url, rpc, _rpc_xml, _device_id, _device_state, _ns, _timeout, _id) when is_binary(rpc) do
     :telemetry.execute([:caretaker, :cpe_client, :rpc, :unsupported], %{}, %{rpc: rpc})
     :ok
   end
+
+  # Get firmware simulator from device_state options
+  defp get_firmware_simulator(nil), do: nil
+
+  defp get_firmware_simulator(device_state) when is_pid(device_state) do
+    case Caretaker.CPE.DeviceState.get_option(device_state, :firmware_simulator) do
+      {:ok, sim} -> sim
+      _ -> nil
+    end
+  end
+
+  defp get_firmware_simulator(_), do: nil
 
   # Parse ParameterNames from GetParameterValues XML
   # Extracts the "string" elements from the ParameterNames array

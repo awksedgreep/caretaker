@@ -218,6 +218,61 @@ defmodule Caretaker.ACS.Server do
               |> Plug.Conn.put_resp_header("content-type", "text/plain")
               |> Plug.Conn.send_resp(204, "")
 
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "DownloadResponse"}
+             }} ->
+              # Acknowledge receipt of DownloadResponse
+              :telemetry.execute([:caretaker, :acs, :download, :response], %{}, %{})
+
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: _id, cwmp_ns: _ns},
+               body: %{rpc: "RebootResponse"}
+             }} ->
+              # Acknowledge receipt of RebootResponse
+              :telemetry.execute([:caretaker, :acs, :reboot, :response], %{}, %{})
+
+              conn
+              |> Plug.Conn.put_resp_header("content-type", "text/plain")
+              |> Plug.Conn.send_resp(204, "")
+
+            {:ok,
+             %{
+               header: %{id: id, cwmp_ns: ns},
+               body: %{rpc: "TransferComplete", xml: tc_xml}
+             }} ->
+              # Handle TransferComplete from CPE
+              with {:ok, tc} <- Caretaker.TR069.RPC.TransferComplete.decode(tc_xml) do
+                :telemetry.execute([:caretaker, :acs, :transfer_complete, :received], %{}, %{
+                  command_key: tc.command_key,
+                  fault_code: tc.fault_code
+                })
+
+                # Send TransferCompleteResponse
+                {:ok, resp_body} =
+                  Caretaker.TR069.RPC.TransferCompleteResponse.encode(
+                    %Caretaker.TR069.RPC.TransferCompleteResponse{}
+                  )
+
+                {:ok, envelope} =
+                  Caretaker.CWMP.SOAP.encode_envelope(resp_body, %{id: id, cwmp_ns: ns})
+
+                conn
+                |> Plug.Conn.put_resp_header("content-type", Caretaker.CWMP.SOAP.content_type())
+                |> Plug.Conn.send_resp(200, IO.iodata_to_binary(envelope))
+              else
+                _ ->
+                  conn
+                  |> Plug.Conn.put_resp_header("content-type", "text/plain")
+                  |> Plug.Conn.send_resp(400, "Bad Request")
+              end
+
             _other ->
               conn
               |> Plug.Conn.put_resp_header("content-type", "text/plain")
@@ -275,6 +330,8 @@ defmodule Caretaker.ACS.Server do
       %{name: name, value: val, type: typ}
     end)
   end
+
+  defp extract_gpv_params_from_node(_), do: []
 
   match _ do
     Plug.Conn.send_resp(conn, 404, "Not Found")
