@@ -4,8 +4,12 @@ defmodule Caretaker.ACS.Session do
 
   Sessions are keyed by DeviceId (OUI/ProductClass/Serial). We also keep a binding of
   caller keys (e.g., {:ip, remote_ip}) -> DeviceKey to correlate empty POSTs.
+
+  Enhanced with device type detection and context for device-specific handling.
   """
   use GenServer
+
+  alias Caretaker.ACS.DeviceDetection
 
   @type command :: iodata()
   @type caller_key :: term()
@@ -15,6 +19,11 @@ defmodule Caretaker.ACS.Session do
           required(:serial_number) => String.t()
         }
   @type device_key :: {String.t(), String.t(), String.t()}
+  @type device_context :: %{
+          device_type: DeviceDetection.device_type(),
+          quirks_module: module() | nil,
+          detected_at: DateTime.t()
+        }
 
   def child_spec(opts \\ []) do
     %{
@@ -37,6 +46,19 @@ defmodule Caretaker.ACS.Session do
   @spec upsert_from_ip(:inet.ip_address(), device_id(), String.t()) :: :ok
   def upsert_from_ip(ip, device_id, cwmp_ns) do
     GenServer.call(__MODULE__, {:upsert_from_ip, ip, device_id, cwmp_ns})
+  end
+
+  @spec upsert_from_ip_with_context(
+          :inet.ip_address(),
+          device_id(),
+          String.t(),
+          device_context()
+        ) :: :ok
+  def upsert_from_ip_with_context(ip, device_id, cwmp_ns, device_context) do
+    GenServer.call(
+      __MODULE__,
+      {:upsert_from_ip_with_context, ip, device_id, cwmp_ns, device_context}
+    )
   end
 
   @spec queue_for_ip(:inet.ip_address(), command()) :: :ok
@@ -70,6 +92,11 @@ defmodule Caretaker.ACS.Session do
     GenServer.call(__MODULE__, {:cwmp_ns_for_ip, ip})
   end
 
+  @spec device_context_for_ip(:inet.ip_address()) :: device_context() | nil
+  def device_context_for_ip(ip) do
+    GenServer.call(__MODULE__, {:device_context_for_ip, ip})
+  end
+
   # Server callbacks
 
   @impl true
@@ -79,8 +106,42 @@ defmodule Caretaker.ACS.Session do
         %{sessions: sessions, bindings: bindings} = state
       ) do
     dev_key = device_key(device_id)
-    sess = Map.get(sessions, dev_key, %{queue: :queue.new(), device_id: nil, cwmp_ns: nil})
+
+    sess =
+      Map.get(sessions, dev_key, %{
+        queue: :queue.new(),
+        device_id: nil,
+        cwmp_ns: nil,
+        device_context: nil
+      })
+
     sess = %{sess | device_id: device_id, cwmp_ns: cwmp_ns}
+
+    {:reply, :ok,
+     %{
+       state
+       | sessions: Map.put(sessions, dev_key, sess),
+         bindings: Map.put(bindings, {:ip, ip}, dev_key)
+     }}
+  end
+
+  @impl true
+  def handle_call(
+        {:upsert_from_ip_with_context, ip, device_id, cwmp_ns, device_context},
+        _from,
+        %{sessions: sessions, bindings: bindings} = state
+      ) do
+    dev_key = device_key(device_id)
+
+    sess =
+      Map.get(sessions, dev_key, %{
+        queue: :queue.new(),
+        device_id: nil,
+        cwmp_ns: nil,
+        device_context: nil
+      })
+
+    sess = %{sess | device_id: device_id, cwmp_ns: cwmp_ns, device_context: device_context}
 
     {:reply, :ok,
      %{
@@ -140,10 +201,30 @@ defmodule Caretaker.ACS.Session do
   @impl true
   def handle_call({:cwmp_ns_for_ip, ip}, _from, %{bindings: bindings, sessions: sessions} = state) do
     case Map.get(bindings, {:ip, ip}) do
-      nil -> {:reply, nil, state}
+      nil ->
+        {:reply, nil, state}
+
       dev_key ->
         case Map.get(sessions, dev_key) do
           %{cwmp_ns: ns} -> {:reply, ns, state}
+          _ -> {:reply, nil, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_call(
+        {:device_context_for_ip, ip},
+        _from,
+        %{bindings: bindings, sessions: sessions} = state
+      ) do
+    case Map.get(bindings, {:ip, ip}) do
+      nil ->
+        {:reply, nil, state}
+
+      dev_key ->
+        case Map.get(sessions, dev_key) do
+          %{device_context: ctx} -> {:reply, ctx, state}
           _ -> {:reply, nil, state}
         end
     end
@@ -156,7 +237,14 @@ defmodule Caretaker.ACS.Session do
         {:noreply, state}
 
       dev_key ->
-        sess = Map.get(sessions, dev_key, %{queue: :queue.new(), device_id: nil, cwmp_ns: nil})
+        sess =
+          Map.get(sessions, dev_key, %{
+            queue: :queue.new(),
+            device_id: nil,
+            cwmp_ns: nil,
+            device_context: nil
+          })
+
         q = :queue.in(cmd, sess.queue)
         {:noreply, %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q})}}
     end
@@ -164,14 +252,28 @@ defmodule Caretaker.ACS.Session do
 
   @impl true
   def handle_cast({:upsert_dev, dev_key, device_id, cwmp_ns}, %{sessions: sessions} = state) do
-    sess = Map.get(sessions, dev_key, %{queue: :queue.new(), device_id: nil, cwmp_ns: nil})
+    sess =
+      Map.get(sessions, dev_key, %{
+        queue: :queue.new(),
+        device_id: nil,
+        cwmp_ns: nil,
+        device_context: nil
+      })
+
     sess = %{sess | device_id: device_id, cwmp_ns: cwmp_ns}
     {:noreply, %{state | sessions: Map.put(sessions, dev_key, sess)}}
   end
 
   @impl true
   def handle_cast({:enqueue_dev, dev_key, cmd}, %{sessions: sessions} = state) do
-    sess = Map.get(sessions, dev_key, %{queue: :queue.new(), device_id: nil, cwmp_ns: nil})
+    sess =
+      Map.get(sessions, dev_key, %{
+        queue: :queue.new(),
+        device_id: nil,
+        cwmp_ns: nil,
+        device_context: nil
+      })
+
     q = :queue.in(cmd, sess.queue)
     {:noreply, %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q})}}
   end
