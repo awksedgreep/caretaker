@@ -1,0 +1,309 @@
+# TR-181 Diagnostics: Ping, TraceRoute, and NSLookup
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CWMP.SOAP
+alias Caretaker.TR069.Diagnostics.{Ping, TraceRoute, NSLookup}
+require Logger
+```
+
+## Overview
+
+TR-181 defines several diagnostic tools that an ACS can trigger on a CPE device:
+
+- **Ping** - ICMP echo request to test connectivity and measure latency
+- **TraceRoute** - Trace the network path to a destination host
+- **NSLookup** - DNS resolution diagnostic
+
+Each diagnostic follows the same pattern:
+1. ACS sends a `SetParameterValues` request to configure the diagnostic parameters
+2. ACS sets `DiagnosticsState` to `"Requested"` to trigger the diagnostic
+3. CPE runs the diagnostic and updates result parameters
+4. ACS polls with `GetParameterValues` to retrieve results
+
+## Building a Ping Diagnostic Request
+
+The Ping diagnostic is defined under `Device.IP.Diagnostics.PingDiagnostics.*`
+
+```elixir
+# Create a basic Ping diagnostic configuration
+# Only `host` is required; other parameters have sensible defaults
+ping_config = Ping.new(host: "8.8.8.8")
+
+Logger.info("Ping config: #{inspect(ping_config)}")
+
+# Build the SetParameterValues body
+{:ok, ping_spv_body} = Ping.build_spv(ping_config)
+
+Logger.info("Ping SPV body fragment:\n#{IO.iodata_to_binary(ping_spv_body)}")
+```
+
+## Building a TraceRoute Diagnostic Request
+
+The TraceRoute diagnostic is defined under `Device.IP.Diagnostics.TraceRouteDiagnostics.*`
+
+```elixir
+# Create a TraceRoute diagnostic configuration
+traceroute_config = TraceRoute.new(host: "cloudflare.com")
+
+Logger.info("TraceRoute config: #{inspect(traceroute_config)}")
+
+# Build the SetParameterValues body
+{:ok, traceroute_spv_body} = TraceRoute.build_spv(traceroute_config)
+
+Logger.info("TraceRoute SPV body fragment:\n#{IO.iodata_to_binary(traceroute_spv_body)}")
+```
+
+## Building an NSLookup Diagnostic Request
+
+The NSLookup diagnostic is defined under `Device.DNS.Diagnostics.NSLookupDiagnostics.*`
+
+```elixir
+# Create an NSLookup diagnostic configuration
+# Note: uses `host_name` instead of `host` to match TR-181 naming
+nslookup_config = NSLookup.new(host_name: "example.com")
+
+Logger.info("NSLookup config: #{inspect(nslookup_config)}")
+
+# Build the SetParameterValues body
+{:ok, nslookup_spv_body} = NSLookup.build_spv(nslookup_config)
+
+Logger.info("NSLookup SPV body fragment:\n#{IO.iodata_to_binary(nslookup_spv_body)}")
+```
+
+## Customizing Diagnostic Parameters
+
+Each diagnostic supports various optional parameters for fine-grained control.
+
+### Ping Options
+
+```elixir
+# Customize Ping with all available options
+custom_ping = Ping.new(
+  host: "1.1.1.1",
+  repetitions: 10,           # Number of ping requests (default: 4)
+  timeout: 2000,             # Timeout in ms per ping (default: 1000)
+  data_block_size: 128,      # ICMP payload size in bytes (default: 56)
+  interface: "Device.IP.Interface.1",  # Source interface (optional)
+  dscp: 46,                  # DiffServ Code Point for QoS (optional)
+  parameter_key: "ping-job-123"  # Key echoed in SetParameterValuesResponse
+)
+
+Logger.info("Custom Ping config:")
+Logger.info("  Host: #{custom_ping.host}")
+Logger.info("  Repetitions: #{custom_ping.repetitions}")
+Logger.info("  Timeout: #{custom_ping.timeout}ms")
+Logger.info("  Data Block Size: #{custom_ping.data_block_size} bytes")
+Logger.info("  Interface: #{custom_ping.interface || "(default)"}")
+Logger.info("  DSCP: #{custom_ping.dscp || "(default)"}")
+
+{:ok, custom_ping_body} = Ping.build_spv(custom_ping)
+IO.iodata_to_binary(custom_ping_body)
+```
+
+### TraceRoute Options
+
+```elixir
+# Customize TraceRoute with all available options
+custom_traceroute = TraceRoute.new(
+  host: "google.com",
+  timeout: 10000,            # Timeout in ms (default: 5000)
+  data_block_size: 64,       # Probe packet size (default: 56)
+  max_hop_count: 15,         # Maximum hops to trace (default: 30)
+  interface: "Device.IP.Interface.2",  # Source interface (optional)
+  dscp: 0,                   # DiffServ Code Point (optional)
+  parameter_key: "trace-job-456"
+)
+
+Logger.info("Custom TraceRoute config:")
+Logger.info("  Host: #{custom_traceroute.host}")
+Logger.info("  Timeout: #{custom_traceroute.timeout}ms")
+Logger.info("  Max Hop Count: #{custom_traceroute.max_hop_count}")
+Logger.info("  Data Block Size: #{custom_traceroute.data_block_size} bytes")
+
+{:ok, custom_traceroute_body} = TraceRoute.build_spv(custom_traceroute)
+IO.iodata_to_binary(custom_traceroute_body)
+```
+
+### NSLookup Options
+
+```elixir
+# Customize NSLookup with all available options
+custom_nslookup = NSLookup.new(
+  host_name: "anthropic.com",
+  dns_server: "8.8.4.4",     # Specific DNS server to query (optional)
+  timeout: 5000,             # Timeout in ms (default: 2000)
+  number_of_repetitions: 3,  # Number of queries (default: 1)
+  interface: "Device.IP.Interface.1",  # Source interface (optional)
+  parameter_key: "nslookup-job-789"
+)
+
+Logger.info("Custom NSLookup config:")
+Logger.info("  Host Name: #{custom_nslookup.host_name}")
+Logger.info("  DNS Server: #{custom_nslookup.dns_server || "(system default)"}")
+Logger.info("  Timeout: #{custom_nslookup.timeout}ms")
+Logger.info("  Repetitions: #{custom_nslookup.number_of_repetitions}")
+
+{:ok, custom_nslookup_body} = NSLookup.build_spv(custom_nslookup)
+IO.iodata_to_binary(custom_nslookup_body)
+```
+
+## Encoding as Complete SOAP Envelopes
+
+The diagnostic request bodies must be wrapped in a SOAP envelope before sending to the CPE.
+
+```elixir
+# Build a complete SOAP envelope for a Ping diagnostic
+ping_config = Ping.new(host: "8.8.8.8", repetitions: 5)
+{:ok, ping_body} = Ping.build_spv(ping_config)
+
+# Wrap in SOAP envelope with a message ID
+{:ok, ping_envelope} = SOAP.encode_envelope(ping_body, %{
+  id: "diag-ping-001",
+  cwmp_ns: "urn:dslforum-org:cwmp-1-0"
+})
+
+Logger.info("Complete Ping SOAP envelope:")
+IO.puts(ping_envelope)
+```
+
+```elixir
+# Build a complete SOAP envelope for a TraceRoute diagnostic
+traceroute_config = TraceRoute.new(host: "example.org", max_hop_count: 20)
+{:ok, traceroute_body} = TraceRoute.build_spv(traceroute_config)
+
+{:ok, traceroute_envelope} = SOAP.encode_envelope(traceroute_body, %{
+  id: "diag-trace-002",
+  cwmp_ns: "urn:dslforum-org:cwmp-1-0"
+})
+
+Logger.info("Complete TraceRoute SOAP envelope:")
+IO.puts(traceroute_envelope)
+```
+
+```elixir
+# Build a complete SOAP envelope for an NSLookup diagnostic
+nslookup_config = NSLookup.new(host_name: "github.com", dns_server: "1.1.1.1")
+{:ok, nslookup_body} = NSLookup.build_spv(nslookup_config)
+
+{:ok, nslookup_envelope} = SOAP.encode_envelope(nslookup_body, %{
+  id: "diag-nslookup-003",
+  cwmp_ns: "urn:dslforum-org:cwmp-1-0"
+})
+
+Logger.info("Complete NSLookup SOAP envelope:")
+IO.puts(nslookup_envelope)
+```
+
+## Diagnostic Workflow: How Results are Retrieved
+
+Diagnostics in TR-069/TR-181 follow an asynchronous pattern:
+
+### 1. Send SetParameterValues to Start Diagnostic
+
+The ACS sends the `SetParameterValues` request (as shown above) which includes:
+- Configuration parameters (host, timeout, etc.)
+- `DiagnosticsState` set to `"Requested"`
+
+### 2. CPE Acknowledges and Runs Diagnostic
+
+The CPE responds with `SetParameterValuesResponse` and begins executing the diagnostic.
+The `DiagnosticsState` transitions through:
+- `"Requested"` - Diagnostic has been requested
+- `"Complete"` - Diagnostic finished successfully
+- `"Error_*"` - Diagnostic encountered an error (e.g., `Error_CannotResolveHostName`)
+
+### 3. Poll for Results with GetParameterValues
+
+The ACS must poll the CPE to check when the diagnostic is complete and retrieve results.
+
+```elixir
+# Example: Parameters to poll for Ping results
+ping_result_params = [
+  "Device.IP.Diagnostics.PingDiagnostics.DiagnosticsState",
+  "Device.IP.Diagnostics.PingDiagnostics.SuccessCount",
+  "Device.IP.Diagnostics.PingDiagnostics.FailureCount",
+  "Device.IP.Diagnostics.PingDiagnostics.AverageResponseTime",
+  "Device.IP.Diagnostics.PingDiagnostics.MinimumResponseTime",
+  "Device.IP.Diagnostics.PingDiagnostics.MaximumResponseTime"
+]
+
+Logger.info("Ping result parameters to poll:")
+Enum.each(ping_result_params, fn p -> Logger.info("  #{p}") end)
+```
+
+```elixir
+# Example: Parameters to poll for TraceRoute results
+# Note: TraceRoute results are in a RouteHops table
+traceroute_result_params = [
+  "Device.IP.Diagnostics.TraceRouteDiagnostics.DiagnosticsState",
+  "Device.IP.Diagnostics.TraceRouteDiagnostics.ResponseTime",
+  "Device.IP.Diagnostics.TraceRouteDiagnostics.RouteHopsNumberOfEntries",
+  # Each hop has its own entry:
+  "Device.IP.Diagnostics.TraceRouteDiagnostics.RouteHops.1.Host",
+  "Device.IP.Diagnostics.TraceRouteDiagnostics.RouteHops.1.HostAddress",
+  "Device.IP.Diagnostics.TraceRouteDiagnostics.RouteHops.1.RTTimes"
+]
+
+Logger.info("TraceRoute result parameters to poll:")
+Enum.each(traceroute_result_params, fn p -> Logger.info("  #{p}") end)
+```
+
+```elixir
+# Example: Parameters to poll for NSLookup results
+# Note: NSLookup results are in a Result table
+nslookup_result_params = [
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.DiagnosticsState",
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.SuccessCount",
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.ResultNumberOfEntries",
+  # Each result has its own entry:
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.Result.1.Status",
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.Result.1.AnswerType",
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.Result.1.HostNameReturned",
+  "Device.DNS.Diagnostics.NSLookupDiagnostics.Result.1.IPAddresses"
+]
+
+Logger.info("NSLookup result parameters to poll:")
+Enum.each(nslookup_result_params, fn p -> Logger.info("  #{p}") end)
+```
+
+### 4. Alternative: Use Passive Notification
+
+Instead of polling, the ACS can set up passive notifications on diagnostic parameters.
+The CPE will then send an Inform with the results when the diagnostic completes.
+
+```elixir
+# DiagnosticsState values and their meanings
+diagnostic_states = %{
+  "None" => "No diagnostic has been requested",
+  "Requested" => "Diagnostic has been requested but not started",
+  "Complete" => "Diagnostic completed successfully",
+  "Error_CannotResolveHostName" => "Could not resolve the target hostname",
+  "Error_MaxHopCountExceeded" => "TraceRoute exceeded max hops without reaching target",
+  "Error_Internal" => "Internal error occurred during diagnostic",
+  "Error_Other" => "Other unspecified error"
+}
+
+Logger.info("DiagnosticsState values:")
+Enum.each(diagnostic_states, fn {state, desc} ->
+  Logger.info("  #{state}: #{desc}")
+end)
+```
+
+## Summary
+
+This livebook demonstrated how to:
+
+1. Create diagnostic configurations using `Ping.new/1`, `TraceRoute.new/1`, and `NSLookup.new/1`
+2. Build `SetParameterValues` request bodies with `build_spv/1`
+3. Customize diagnostic parameters (host, timeout, repetitions, etc.)
+4. Wrap diagnostic requests in complete SOAP envelopes
+5. Understand the asynchronous diagnostic workflow in TR-069
+
+The diagnostic modules handle all the TR-181 parameter naming and type conversions,
+making it easy to trigger network diagnostics on CPE devices.

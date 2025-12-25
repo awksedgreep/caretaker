@@ -658,7 +658,7 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     headers = [
       {"content-type", SOAP.content_type()},
       {"soapaction", ""},
-      {"user-agent", "CaretakerCPE/0.1"},
+      {"user-agent", "CaretakerCPE/0.2"},
       {"accept", "text/xml"}
     ]
 
@@ -692,7 +692,7 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
 
   defp http_post_empty(url, timeout) do
     headers = [
-      {"user-agent", "CaretakerCPE/0.1"},
+      {"user-agent", "CaretakerCPE/0.2"},
       {"accept", "text/xml"}
     ]
 

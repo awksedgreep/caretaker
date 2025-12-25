@@ -1,0 +1,855 @@
+# Device Simulation: Optical, DOCSIS, and Router
+
+> This notebook demonstrates advanced device simulation including PON/optical signals, DOCSIS channels, and router resources with realistic degradation scenarios.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CPE.DeviceState
+alias Caretaker.CPE.Simulation.{OpticalSignal, DocsisChannel, RouterResources}
+alias Caretaker.CPE.Events.{PON, DOCSIS, Router}
+require Logger
+```
+
+## Section 1: PON/Optical Signal Simulation
+
+PON (Passive Optical Network) devices use fiber optic connections. Key parameters include:
+- **RX Power**: Optical receive power (typically -8 to -28 dBm)
+- **TX Power**: Optical transmit power (typically 0.5 to 4.5 dBm)
+- **Temperature**: SFP module temperature
+- **Voltage/Bias**: Power supply and laser bias current
+
+### Create a PON Device
+
+```elixir
+# Create a PON ONT device with optical parameters
+{:ok, pon_device} = DeviceState.start_link(
+  device_id: %{oui: "PON001", product_class: "ONT", serial_number: "ONT12345"},
+  params: %{
+    "Device.DeviceInfo.Manufacturer" => "Fiber Optics Inc",
+    "Device.DeviceInfo.ModelName" => "GPON-ONT-2000",
+    "Device.DeviceInfo.SoftwareVersion" => "3.2.1",
+    "Device.DeviceInfo.UpTime" => 86400,
+    "Device.DeviceInfo.X_VENDOR_SupplyVoltage" => 12.0,
+    "Device.DeviceInfo.X_VENDOR_PowerStatus" => "normal",
+    # Optical interface parameters
+    "Device.Optical.Interface.1.Enable" => true,
+    "Device.Optical.Interface.1.Status" => "Up",
+    "Device.Optical.Interface.1.OpticalSignalLevel" => -18.5,
+    "Device.Optical.Interface.1.TransmitOpticalLevel" => 2.5,
+    "Device.Optical.Interface.1.Temperature" => 45,
+    "Device.Optical.Interface.1.Voltage" => 3.3,
+    "Device.Optical.Interface.1.Bias" => 25.0,
+    "Device.Optical.Interface.1.LowerOpticalThreshold" => -27.0,
+    "Device.Optical.Interface.1.UpperOpticalThreshold" => -8.0,
+    # PON status
+    "Device.X_VENDOR_PON.Status" => "operational"
+  }
+)
+
+Logger.info("PON device created")
+OpticalSignal.status(pon_device)
+```
+
+### Normal Optical Signal Updates
+
+The OpticalSignal module simulates realistic variations in optical parameters.
+
+```elixir
+# Get initial status
+Logger.info("=== Initial Optical Status ===")
+initial = OpticalSignal.status(pon_device)
+Logger.info("RX Power: #{initial.rx_power} dBm")
+Logger.info("TX Power: #{initial.tx_power} dBm")
+Logger.info("Temperature: #{initial.temperature}C")
+Logger.info("Status: #{initial.status}")
+
+# Simulate normal operation for a few cycles
+Logger.info("\n=== Simulating Normal Operation ===")
+for i <- 1..3 do
+  OpticalSignal.update(pon_device, scenario: :normal, noise: 0.3)
+  status = OpticalSignal.status(pon_device)
+  Logger.info("Cycle #{i}: RX=#{status.rx_power} dBm, TX=#{status.tx_power} dBm, Temp=#{status.temperature}C")
+  Process.sleep(500)
+end
+
+OpticalSignal.status(pon_device)
+```
+
+### Simulating Degraded Optical Signal
+
+When fiber quality degrades (dirty connector, aging splice), signal levels drop.
+
+```elixir
+Logger.info("=== Simulating Degraded Signal ===")
+
+# Simulate degraded conditions
+for i <- 1..5 do
+  OpticalSignal.update(pon_device, scenario: :degraded, load_factor: 0.6)
+  status = OpticalSignal.status(pon_device)
+  Logger.info("Degraded cycle #{i}: RX=#{status.rx_power} dBm, Status=#{status.status}")
+  Process.sleep(300)
+end
+
+# Check if alarms were triggered
+status = OpticalSignal.status(pon_device)
+Logger.info("\nFinal status after degradation: #{status.status}")
+Logger.info("RX Power: #{status.rx_power} dBm (threshold: #{status.lower_threshold} dBm)")
+
+status
+```
+
+### Simulating Critical Conditions
+
+Critical conditions (severe fiber bend, partial cut) trigger alarms.
+
+```elixir
+Logger.info("=== Simulating Critical Condition ===")
+
+# Push into critical territory
+for i <- 1..5 do
+  OpticalSignal.update(pon_device, scenario: :critical, load_factor: 0.9)
+  status = OpticalSignal.status(pon_device)
+  Logger.info("Critical cycle #{i}: RX=#{status.rx_power} dBm, Temp=#{status.temperature}C")
+  Process.sleep(200)
+end
+
+# Check final state
+final = OpticalSignal.status(pon_device)
+Logger.info("\nCritical scenario results:")
+Logger.info("  Status: #{final.status}")
+Logger.info("  RX Power: #{final.rx_power} dBm")
+Logger.info("  Voltage: #{final.voltage} V")
+Logger.info("  Bias: #{final.bias} mA")
+
+final
+```
+
+### PON-Specific Events
+
+```elixir
+Logger.info("=== PON Events Demonstration ===")
+
+# Check supported PON events
+events = PON.supported_events()
+Logger.info("Supported PON events: #{inspect(events)}")
+
+# Simulate ONU registration sequence
+Logger.info("\n--- ONU Registration ---")
+DeviceState.set(pon_device, "Device.X_VENDOR_PON.Status", "unregistered")
+DeviceState.set(pon_device, "Device.Optical.Interface.1.Status", "Down")
+
+registration_events = PON.simulate_onu_registration(pon_device, :operational)
+Logger.info("Registration generated #{length(registration_events)} events")
+for event <- registration_events do
+  Logger.info("  Event: #{event.event_code} - #{event.event_type}")
+end
+
+# Verify status
+pon_status = DeviceState.get(pon_device, "Device.X_VENDOR_PON.Status")
+Logger.info("PON Status after registration: #{pon_status}")
+
+registration_events
+```
+
+### Simulating Dying Gasp
+
+Dying gasp is the last message sent when an ONT loses power.
+
+```elixir
+Logger.info("=== Dying Gasp Simulation ===")
+
+# Restore normal state first
+DeviceState.set(pon_device, "Device.Optical.Interface.1.OpticalSignalLevel", -18.5)
+DeviceState.set(pon_device, "Device.Optical.Interface.1.Status", "Up")
+DeviceState.set(pon_device, "Device.X_VENDOR_PON.Status", "operational")
+
+Logger.info("Before dying gasp:")
+Logger.info("  Status: #{DeviceState.get(pon_device, "Device.Optical.Interface.1.Status")}")
+Logger.info("  Voltage: #{DeviceState.get(pon_device, "Device.Optical.Interface.1.Voltage")} V")
+
+# Simulate dying gasp (power loss)
+OpticalSignal.simulate_dying_gasp(pon_device)
+
+Logger.info("\nAfter dying gasp:")
+Logger.info("  Status: #{DeviceState.get(pon_device, "Device.Optical.Interface.1.Status")}")
+Logger.info("  Voltage: #{DeviceState.get(pon_device, "Device.Optical.Interface.1.Voltage")} V")
+Logger.info("  Power Status: #{DeviceState.get(pon_device, "Device.DeviceInfo.X_VENDOR_PowerStatus")}")
+
+:dying_gasp_simulated
+```
+
+### Fiber Cut and Restore Scenario
+
+```elixir
+Logger.info("=== Fiber Cut Scenario ===")
+
+# Restore device first
+DeviceState.set(pon_device, "Device.Optical.Interface.1.OpticalSignalLevel", -18.5)
+DeviceState.set(pon_device, "Device.Optical.Interface.1.Status", "Up")
+DeviceState.set(pon_device, "Device.X_VENDOR_PON.Status", "operational")
+DeviceState.set(pon_device, "Device.Optical.Interface.1.Voltage", 3.3)
+
+Logger.info("Initial state: RX=#{DeviceState.get(pon_device, "Device.Optical.Interface.1.OpticalSignalLevel")} dBm")
+
+# Simulate fiber cut
+cut_events = PON.simulate_fiber_cut(pon_device)
+Logger.info("\nFiber cut generated #{length(cut_events)} events:")
+for event <- cut_events do
+  Logger.info("  #{event.event_code}: #{event.event_type}")
+end
+
+Logger.info("\nAfter cut: RX=#{DeviceState.get(pon_device, "Device.Optical.Interface.1.OpticalSignalLevel")} dBm")
+Logger.info("Status: #{DeviceState.get(pon_device, "Device.Optical.Interface.1.Status")}")
+
+# Wait and restore
+Process.sleep(1000)
+Logger.info("\n--- Restoring Fiber Connection ---")
+restore_events = PON.simulate_fiber_restore(pon_device, -19.0)
+Logger.info("Restore generated #{length(restore_events)} events:")
+for event <- restore_events do
+  Logger.info("  #{event.event_code}: #{event.event_type}")
+end
+
+Logger.info("\nAfter restore: RX=#{DeviceState.get(pon_device, "Device.Optical.Interface.1.OpticalSignalLevel")} dBm")
+Logger.info("Status: #{DeviceState.get(pon_device, "Device.Optical.Interface.1.Status")}")
+
+%{cut_events: cut_events, restore_events: restore_events}
+```
+
+## Section 2: DOCSIS Channel Simulation
+
+DOCSIS (Data Over Cable Service Interface Specification) modems bond multiple downstream and upstream channels.
+
+### Create a DOCSIS Cable Modem
+
+```elixir
+# Build DOCSIS channel parameters
+downstream_params =
+  for ch <- 1..32, into: %{} do
+    {"Device.Docsis.Downstream.#{ch}.SNRLevel", 38.5 + :rand.uniform() * 2}
+  end
+  |> Map.merge(
+    for ch <- 1..32, into: %{} do
+      {"Device.Docsis.Downstream.#{ch}.PowerLevel", 2.5 + :rand.uniform()}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..32, into: %{} do
+      {"Device.Docsis.Downstream.#{ch}.LockStatus", "Locked"}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..32, into: %{} do
+      {"Device.Docsis.Downstream.#{ch}.Status", "Up"}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..32, into: %{} do
+      {"Device.Docsis.Downstream.#{ch}.Correcteds", 100}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..32, into: %{} do
+      {"Device.Docsis.Downstream.#{ch}.Uncorrectables", 0}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..32, into: %{} do
+      {"Device.Docsis.Downstream.#{ch}.Octets", 1_000_000}
+    end
+  )
+
+upstream_params =
+  for ch <- 1..8, into: %{} do
+    {"Device.Docsis.Upstream.#{ch}.PowerLevel", 42.0 + :rand.uniform() * 2}
+  end
+  |> Map.merge(
+    for ch <- 1..8, into: %{} do
+      {"Device.Docsis.Upstream.#{ch}.T3Timeouts", 0}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..8, into: %{} do
+      {"Device.Docsis.Upstream.#{ch}.T4Timeouts", 0}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..8, into: %{} do
+      {"Device.Docsis.Upstream.#{ch}.RangingStatus", "Success"}
+    end
+  )
+  |> Map.merge(
+    for ch <- 1..8, into: %{} do
+      {"Device.Docsis.Upstream.#{ch}.Status", "Up"}
+    end
+  )
+
+base_params = %{
+  "Device.DeviceInfo.Manufacturer" => "Cable Modem Corp",
+  "Device.DeviceInfo.ModelName" => "DOCSIS31-CM-8x32",
+  "Device.DeviceInfo.SoftwareVersion" => "4.1.0",
+  "Device.Docsis.Status" => "Operational",
+  "Device.Docsis.BootState" => "Operational",
+  "Device.Docsis.Interface.1.ConfigFileName" => "gold.cfg",
+  "Device.Docsis.DownstreamNumberOfEntries" => 32,
+  "Device.Docsis.UpstreamNumberOfEntries" => 8
+}
+
+{:ok, docsis_device} = DeviceState.start_link(
+  device_id: %{oui: "DOCSIS01", product_class: "CableModem", serial_number: "CM98765"},
+  params: Map.merge(base_params, Map.merge(downstream_params, upstream_params))
+)
+
+Logger.info("DOCSIS cable modem created with 32 downstream and 8 upstream channels")
+DocsisChannel.status(docsis_device)
+```
+
+### Normal DOCSIS Channel Updates
+
+```elixir
+Logger.info("=== Normal DOCSIS Operation ===")
+
+# Get initial status
+initial = DocsisChannel.status(docsis_device)
+Logger.info("Initial: Status=#{initial.status}, DS SNR=#{initial.downstream_snr} dB, US Power=#{initial.upstream_power} dBmV")
+
+# Simulate normal updates
+for i <- 1..3 do
+  DocsisChannel.update(docsis_device, scenario: :normal)
+  status = DocsisChannel.status(docsis_device)
+  Logger.info("Cycle #{i}: Status=#{status.status}, Boot=#{status.boot_state}")
+  Process.sleep(300)
+end
+
+DocsisChannel.status(docsis_device)
+```
+
+### Simulating Plant Issues (RF Ingress)
+
+Plant issues cause SNR degradation and increased errors across channels.
+
+```elixir
+Logger.info("=== Simulating RF Plant Issue ===")
+
+# Simulate plant issue affecting specific downstream channels
+for i <- 1..5 do
+  DocsisChannel.update(docsis_device,
+    scenario: :plant_issue,
+    affected_downstream: [1, 2, 3, 4, 5, 6, 7, 8]  # First 8 channels affected
+  )
+
+  # Check a few channels
+  snr_ch1 = DeviceState.get(docsis_device, "Device.Docsis.Downstream.1.SNRLevel")
+  snr_ch16 = DeviceState.get(docsis_device, "Device.Docsis.Downstream.16.SNRLevel")
+  t3 = DeviceState.get(docsis_device, "Device.Docsis.Upstream.1.T3Timeouts")
+
+  Logger.info("Plant issue #{i}: Ch1 SNR=#{Float.round(snr_ch1, 1)} dB, Ch16 SNR=#{Float.round(snr_ch16, 1)} dB, T3=#{t3}")
+  Process.sleep(200)
+end
+
+# Check error counters
+correcteds = DeviceState.get(docsis_device, "Device.Docsis.Downstream.1.Correcteds")
+uncorrectables = DeviceState.get(docsis_device, "Device.Docsis.Downstream.1.Uncorrectables")
+Logger.info("\nChannel 1 FEC: Corrected=#{correcteds}, Uncorrectable=#{uncorrectables}")
+
+DocsisChannel.status(docsis_device)
+```
+
+### T3/T4 Timeout Events
+
+T3/T4 timeouts indicate upstream communication problems.
+
+```elixir
+Logger.info("=== T3/T4 Timeout Simulation ===")
+
+# Check current timeout counts
+t3_before = DeviceState.get(docsis_device, "Device.Docsis.Upstream.1.T3Timeouts")
+t4_before = DeviceState.get(docsis_device, "Device.Docsis.Upstream.1.T4Timeouts")
+Logger.info("Before: T3=#{t3_before}, T4=#{t4_before}")
+
+# Simulate T3 timeout (upstream ranging request timeout)
+t3_events = DOCSIS.simulate_t3_timeout(docsis_device, 1)
+Logger.info("T3 timeout event: #{inspect(hd(t3_events).event_code)}")
+
+# Simulate T4 timeout (ranging response timeout)
+t4_events = DOCSIS.simulate_t4_timeout(docsis_device, 2)
+Logger.info("T4 timeout event: #{inspect(hd(t4_events).event_code)}")
+
+# Check counts after
+t3_after = DeviceState.get(docsis_device, "Device.Docsis.Upstream.1.T3Timeouts")
+t4_after = DeviceState.get(docsis_device, "Device.Docsis.Upstream.2.T4Timeouts")
+Logger.info("After: Ch1 T3=#{t3_after}, Ch2 T4=#{t4_after}")
+
+%{t3_events: t3_events, t4_events: t4_events}
+```
+
+### Ranging Issues and Partial Service
+
+```elixir
+Logger.info("=== Ranging Issue Simulation ===")
+
+# Simulate ranging problems
+for i <- 1..3 do
+  DocsisChannel.update(docsis_device, scenario: :ranging_issue)
+  status = DocsisChannel.status(docsis_device)
+  Logger.info("Ranging issue #{i}: Status=#{status.status}, Boot=#{status.boot_state}")
+  Process.sleep(300)
+end
+
+# Check ranging status
+ranging_ch1 = DeviceState.get(docsis_device, "Device.Docsis.Upstream.1.RangingStatus")
+Logger.info("Upstream 1 ranging status: #{ranging_ch1}")
+
+# Simulate partial service (some channels lost)
+Logger.info("\n--- Partial Service Mode ---")
+partial_events = DOCSIS.simulate_partial_service(docsis_device, 16)
+Logger.info("Partial service: #{hd(partial_events).event_type}")
+Logger.info("Modem status: #{DeviceState.get(docsis_device, "Device.Docsis.Status")}")
+
+partial_events
+```
+
+### Cable Modem Registration Flow
+
+```elixir
+Logger.info("=== CM Registration Sequence ===")
+
+# Reset to non-operational
+DeviceState.set(docsis_device, "Device.Docsis.Status", "NotReady")
+DeviceState.set(docsis_device, "Device.Docsis.BootState", "Scanning")
+
+# Simulate full registration (this takes a few seconds)
+Logger.info("Starting registration sequence...")
+DocsisChannel.simulate_registration(docsis_device)
+
+# Verify final state
+status = DocsisChannel.status(docsis_device)
+Logger.info("\nRegistration complete!")
+Logger.info("Status: #{status.status}")
+Logger.info("Boot State: #{status.boot_state}")
+
+status
+```
+
+## Section 3: Router Resource Simulation
+
+Router simulation covers CPU, memory, connections, and interface traffic.
+
+### Create a Router Device
+
+```elixir
+{:ok, router_device} = DeviceState.start_link(
+  device_id: %{oui: "ROUTER01", product_class: "Router", serial_number: "RTR54321"},
+  params: %{
+    "Device.DeviceInfo.Manufacturer" => "Network Systems",
+    "Device.DeviceInfo.ModelName" => "Enterprise-Router-1000",
+    "Device.DeviceInfo.SoftwareVersion" => "7.12.1",
+    "Device.DeviceInfo.UpTime" => 0,
+    "Device.DeviceInfo.ProcessStatus.CPUUsage" => 15,
+    "Device.DeviceInfo.MemoryStatus.Total" => 1_048_576,  # 1GB in KB
+    "Device.DeviceInfo.MemoryStatus.Free" => 800_000,
+    "Device.Firewall.X_MIKROTIK_ConnectionCount" => 500,
+    "Device.X_VENDOR_ConnectionTracking.Current" => 500,
+    # Ethernet interfaces
+    "Device.Ethernet.InterfaceNumberOfEntries" => 5,
+    "Device.Ethernet.Interface.1.Status" => "Up",
+    "Device.Ethernet.Interface.1.Upstream" => true,  # WAN
+    "Device.Ethernet.Interface.1.Stats.BytesSent" => 0,
+    "Device.Ethernet.Interface.1.Stats.BytesReceived" => 0,
+    "Device.Ethernet.Interface.1.Stats.PacketsSent" => 0,
+    "Device.Ethernet.Interface.1.Stats.PacketsReceived" => 0,
+    "Device.Ethernet.Interface.1.Stats.ErrorsReceived" => 0,
+    "Device.Ethernet.Interface.1.Stats.DiscardPacketsSent" => 0,
+    "Device.Ethernet.Interface.2.Status" => "Up",
+    "Device.Ethernet.Interface.2.Upstream" => false,  # LAN
+    "Device.Ethernet.Interface.2.Stats.BytesSent" => 0,
+    "Device.Ethernet.Interface.2.Stats.BytesReceived" => 0,
+    "Device.Ethernet.Interface.3.Status" => "Down",
+    "Device.Ethernet.Interface.4.Status" => "Down",
+    "Device.Ethernet.Interface.5.Status" => "Down",
+    # IP interfaces
+    "Device.IP.InterfaceNumberOfEntries" => 1,
+    "Device.IP.Interface.1.Status" => "Up",
+    "Device.IP.Interface.1.IPv4Address.1.IPAddress" => "192.168.1.1"
+  }
+)
+
+Logger.info("Router device created")
+RouterResources.status(router_device)
+```
+
+### Resource Simulation with Load Profiles
+
+```elixir
+Logger.info("=== Router Load Profiles ===")
+
+profiles = [:idle, :low, :normal, :high, :exhausted]
+
+for profile <- profiles do
+  RouterResources.update(router_device, load_profile: profile)
+  status = RouterResources.status(router_device)
+
+  Logger.info("#{String.pad_trailing(to_string(profile), 10)} - CPU: #{String.pad_leading(to_string(status.cpu_usage), 3)}%, " <>
+              "Memory Used: #{String.pad_leading(to_string(Float.round(status.memory_used_pct || 0.0, 1)), 5)}%, " <>
+              "Uptime: #{status.uptime}s")
+  Process.sleep(200)
+end
+
+RouterResources.status(router_device)
+```
+
+### Monitoring Interface Traffic
+
+```elixir
+Logger.info("=== Interface Traffic Simulation ===")
+
+# Simulate traffic under different loads
+Logger.info("Simulating traffic patterns...")
+
+for {profile, i} <- Enum.with_index([:low, :normal, :high]) do
+  RouterResources.update(router_device, load_profile: profile)
+
+  wan_sent = DeviceState.get(router_device, "Device.Ethernet.Interface.1.Stats.BytesSent")
+  wan_recv = DeviceState.get(router_device, "Device.Ethernet.Interface.1.Stats.BytesReceived")
+  lan_sent = DeviceState.get(router_device, "Device.Ethernet.Interface.2.Stats.BytesSent")
+
+  Logger.info("#{profile}: WAN TX=#{div(wan_sent, 1000)}KB, WAN RX=#{div(wan_recv, 1000)}KB, LAN TX=#{div(lan_sent, 1000)}KB")
+  Process.sleep(300)
+end
+
+# Check for errors under high load
+RouterResources.update(router_device, load_profile: :exhausted)
+errors = DeviceState.get(router_device, "Device.Ethernet.Interface.1.Stats.ErrorsReceived")
+discards = DeviceState.get(router_device, "Device.Ethernet.Interface.1.Stats.DiscardPacketsSent")
+Logger.info("\nUnder exhausted load: Errors=#{errors}, Discards=#{discards}")
+
+RouterResources.status(router_device)
+```
+
+### Load Ramp Simulation
+
+Simulates gradually increasing load over time.
+
+```elixir
+Logger.info("=== Load Ramp Simulation ===")
+
+# Run a quick load ramp (5 seconds, 5 steps for demo)
+Logger.info("Starting load ramp...")
+RouterResources.simulate_load_ramp(router_device, duration: 5_000, steps: 5)
+
+Logger.info("\nRamp complete!")
+final_status = RouterResources.status(router_device)
+Logger.info("Final CPU: #{final_status.cpu_usage}%")
+Logger.info("Final Memory Used: #{final_status.memory_used_pct}%")
+
+# Detect current load profile
+detected = RouterResources.detect_load_profile(router_device)
+Logger.info("Detected load profile: #{detected}")
+
+final_status
+```
+
+## Section 4: Router-Specific Events
+
+### WAN Link Events
+
+```elixir
+Logger.info("=== WAN Link Events ===")
+
+# Ensure WAN is up first
+DeviceState.set(router_device, "Device.IP.Interface.1.Status", "Up")
+
+# Simulate WAN link down
+down_events = Router.simulate_wan_link_change(router_device, :down)
+Logger.info("WAN down events: #{length(down_events)}")
+for event <- down_events do
+  Logger.info("  #{event.event_code}: #{event.event_type}")
+end
+
+Logger.info("WAN Status: #{DeviceState.get(router_device, "Device.IP.Interface.1.Status")}")
+
+Process.sleep(500)
+
+# Restore WAN link
+up_events = Router.simulate_wan_link_change(router_device, :up)
+Logger.info("\nWAN up events: #{length(up_events)}")
+Logger.info("WAN Status: #{DeviceState.get(router_device, "Device.IP.Interface.1.Status")}")
+
+%{down_events: down_events, up_events: up_events}
+```
+
+### DHCP Lease Events
+
+```elixir
+Logger.info("=== DHCP Lease Events ===")
+
+# Simulate acquiring a DHCP lease
+acquire_events = Router.simulate_dhcp_lease_acquired(router_device, "203.0.113.50", 86400)
+Logger.info("Acquired: #{DeviceState.get(router_device, "Device.IP.Interface.1.IPv4Address.1.IPAddress")}")
+
+# Simulate renewal
+Process.sleep(300)
+renew_events = Router.simulate_dhcp_lease_renewed(router_device, "203.0.113.50")
+Logger.info("Renewed lease")
+
+# Simulate expiration
+Process.sleep(300)
+expire_events = Router.simulate_dhcp_lease_expired(router_device)
+Logger.info("Expired: #{DeviceState.get(router_device, "Device.IP.Interface.1.IPv4Address.1.IPAddress")}")
+
+%{
+  acquired: length(acquire_events),
+  renewed: length(renew_events),
+  expired: length(expire_events)
+}
+```
+
+### ISP Outage Simulation
+
+```elixir
+Logger.info("=== ISP Outage Scenario ===")
+
+# Setup initial state
+DeviceState.set(router_device, "Device.IP.Interface.1.Status", "Up")
+DeviceState.set(router_device, "Device.IP.Interface.1.IPv4Address.1.IPAddress", "203.0.113.100")
+
+Logger.info("Before outage:")
+Logger.info("  WAN Status: #{DeviceState.get(router_device, "Device.IP.Interface.1.Status")}")
+Logger.info("  IP Address: #{DeviceState.get(router_device, "Device.IP.Interface.1.IPv4Address.1.IPAddress")}")
+
+# Simulate ISP outage
+outage_events = Router.simulate_isp_outage(router_device)
+Logger.info("\nOutage events: #{length(outage_events)}")
+for event <- outage_events do
+  Logger.info("  #{event.event_code}: #{event.event_type}")
+end
+
+Logger.info("\nDuring outage:")
+Logger.info("  WAN Status: #{DeviceState.get(router_device, "Device.IP.Interface.1.Status")}")
+Logger.info("  IP Address: #{DeviceState.get(router_device, "Device.IP.Interface.1.IPv4Address.1.IPAddress")}")
+
+# Wait and restore
+Process.sleep(1000)
+Logger.info("\n--- Restoring ISP Connection ---")
+restore_events = Router.simulate_isp_restore(router_device, "203.0.113.101")
+Logger.info("Restore events: #{length(restore_events)}")
+
+Logger.info("\nAfter restore:")
+Logger.info("  WAN Status: #{DeviceState.get(router_device, "Device.IP.Interface.1.Status")}")
+Logger.info("  IP Address: #{DeviceState.get(router_device, "Device.IP.Interface.1.IPv4Address.1.IPAddress")}")
+
+%{outage_events: outage_events, restore_events: restore_events}
+```
+
+### Resource Alarm Events
+
+```elixir
+Logger.info("=== Resource Alarm Checks ===")
+
+# Set high CPU
+DeviceState.set(router_device, "Device.DeviceInfo.ProcessStatus.CPUUsage", 85)
+cpu_events = Router.check_cpu_usage(router_device)
+Logger.info("CPU at 85%: #{length(cpu_events)} event(s)")
+
+DeviceState.set(router_device, "Device.DeviceInfo.ProcessStatus.CPUUsage", 97)
+cpu_critical = Router.check_cpu_usage(router_device)
+Logger.info("CPU at 97%: #{length(cpu_critical)} event(s) - #{if length(cpu_critical) > 0, do: hd(cpu_critical).event_type}")
+
+# Set high memory usage
+DeviceState.set(router_device, "Device.DeviceInfo.MemoryStatus.Free", 50_000)  # ~5% free
+mem_events = Router.check_memory_usage(router_device)
+Logger.info("Memory at 95%: #{length(mem_events)} event(s)")
+
+# Check connection limits
+DeviceState.set(router_device, "Device.X_VENDOR_ConnectionTracking.Current", 60000)
+conn_events = Router.check_connection_limit(router_device, 65536)
+Logger.info("Connections at 92%: #{length(conn_events)} event(s)")
+
+# Run full health check
+DeviceState.set(router_device, "Device.DeviceInfo.ProcessStatus.CPUUsage", 90)
+DeviceState.set(router_device, "Device.DeviceInfo.MemoryStatus.Free", 100_000)
+health_events = Router.periodic_health_check(router_device)
+Logger.info("\nPeriodic health check found #{length(health_events)} issue(s)")
+
+health_events
+```
+
+## Section 5: Integration with DeviceState
+
+### Combining Simulations for Realistic Behavior
+
+```elixir
+Logger.info("=== Integrated Device Simulation ===")
+
+# Create a combined device (ONT with router functionality)
+{:ok, combo_device} = DeviceState.start_link(
+  device_id: %{oui: "COMBO01", product_class: "ONT-Router", serial_number: "COMBO001"},
+  params: %{
+    # Device info
+    "Device.DeviceInfo.Manufacturer" => "Combo Networks",
+    "Device.DeviceInfo.ModelName" => "ONT-Router-Pro",
+    "Device.DeviceInfo.UpTime" => 0,
+    "Device.DeviceInfo.ProcessStatus.CPUUsage" => 20,
+    "Device.DeviceInfo.MemoryStatus.Total" => 524_288,
+    "Device.DeviceInfo.MemoryStatus.Free" => 400_000,
+    # Optical interface
+    "Device.Optical.Interface.1.Status" => "Up",
+    "Device.Optical.Interface.1.OpticalSignalLevel" => -18.0,
+    "Device.Optical.Interface.1.TransmitOpticalLevel" => 2.5,
+    "Device.Optical.Interface.1.Temperature" => 42,
+    "Device.Optical.Interface.1.Voltage" => 3.3,
+    "Device.Optical.Interface.1.Bias" => 24.0,
+    "Device.Optical.Interface.1.LowerOpticalThreshold" => -27.0,
+    "Device.Optical.Interface.1.UpperOpticalThreshold" => -8.0,
+    "Device.X_VENDOR_PON.Status" => "operational",
+    # Ethernet/IP for routing
+    "Device.Ethernet.InterfaceNumberOfEntries" => 4,
+    "Device.Ethernet.Interface.1.Status" => "Up",
+    "Device.Ethernet.Interface.1.Upstream" => true,
+    "Device.Ethernet.Interface.1.Stats.BytesSent" => 0,
+    "Device.Ethernet.Interface.1.Stats.BytesReceived" => 0,
+    "Device.Ethernet.Interface.2.Status" => "Up",
+    "Device.Ethernet.Interface.2.Stats.BytesSent" => 0,
+    "Device.Ethernet.Interface.2.Stats.BytesReceived" => 0,
+    "Device.Ethernet.Interface.3.Status" => "Down",
+    "Device.Ethernet.Interface.4.Status" => "Down",
+    "Device.IP.InterfaceNumberOfEntries" => 1,
+    "Device.IP.Interface.1.Status" => "Up",
+    "Device.IP.Interface.1.IPv4Address.1.IPAddress" => "10.0.0.1"
+  }
+)
+
+Logger.info("Combo ONT-Router device created")
+```
+
+### Running Combined Simulation Cycles
+
+```elixir
+Logger.info("=== Combined Simulation Cycles ===")
+
+# Simulate realistic operation cycles
+for cycle <- 1..5 do
+  # Update optical parameters (varies with temperature/load)
+  load_factor = :rand.uniform() * 0.3 + 0.2
+  OpticalSignal.update(combo_device, scenario: :normal, load_factor: load_factor)
+
+  # Update router resources based on detected load
+  current_profile = RouterResources.detect_load_profile(combo_device)
+  RouterResources.update(combo_device, load_profile: current_profile)
+
+  # Get combined status
+  optical = OpticalSignal.status(combo_device)
+  router = RouterResources.status(combo_device)
+
+  Logger.info("Cycle #{cycle}: RX=#{optical.rx_power}dBm, Temp=#{optical.temperature}C, CPU=#{router.cpu_usage}%, Uptime=#{router.uptime}s")
+
+  Process.sleep(500)
+end
+
+# Final combined status
+%{
+  optical: OpticalSignal.status(combo_device),
+  router: RouterResources.status(combo_device)
+}
+```
+
+### Simulating a Degradation Cascade
+
+When one subsystem degrades, it can affect others.
+
+```elixir
+Logger.info("=== Degradation Cascade Scenario ===")
+
+Logger.info("Initial state:")
+Logger.info("  Optical RX: #{DeviceState.get(combo_device, "Device.Optical.Interface.1.OpticalSignalLevel")} dBm")
+Logger.info("  CPU: #{DeviceState.get(combo_device, "Device.DeviceInfo.ProcessStatus.CPUUsage")}%")
+
+# Stage 1: Optical signal starts degrading
+Logger.info("\n--- Stage 1: Optical Degradation ---")
+for _ <- 1..3 do
+  OpticalSignal.update(combo_device, scenario: :degraded)
+end
+Logger.info("Optical RX dropped to: #{DeviceState.get(combo_device, "Device.Optical.Interface.1.OpticalSignalLevel")} dBm")
+
+# Stage 2: Device works harder (retransmissions, error correction)
+Logger.info("\n--- Stage 2: Increased Load ---")
+RouterResources.update(combo_device, load_profile: :high)
+Logger.info("CPU increased to: #{DeviceState.get(combo_device, "Device.DeviceInfo.ProcessStatus.CPUUsage")}%")
+
+# Stage 3: Critical optical level reached
+Logger.info("\n--- Stage 3: Critical Optical Level ---")
+for _ <- 1..5 do
+  OpticalSignal.update(combo_device, scenario: :critical)
+end
+optical_status = OpticalSignal.status(combo_device)
+Logger.info("Optical Status: #{optical_status.status}")
+Logger.info("Optical RX: #{optical_status.rx_power} dBm")
+
+# Stage 4: Check for alarms
+Logger.info("\n--- Stage 4: Alarm Check ---")
+alarm_events = PON.periodic_alarm_check(combo_device)
+Logger.info("PON alarms generated: #{length(alarm_events)}")
+
+router_events = Router.periodic_health_check(combo_device)
+Logger.info("Router health issues: #{length(router_events)}")
+
+%{
+  final_optical: optical_status,
+  final_router: RouterResources.status(combo_device),
+  alarms: alarm_events,
+  health_issues: router_events
+}
+```
+
+## Section 6: Cleanup
+
+```elixir
+Logger.info("=== Cleanup ===")
+
+# Stop all device states
+Agent.stop(pon_device)
+Agent.stop(docsis_device)
+Agent.stop(router_device)
+Agent.stop(combo_device)
+
+Logger.info("All device states stopped")
+:ok
+```
+
+## Summary
+
+This notebook demonstrated:
+
+1. **PON/Optical Signal Simulation**
+   - Normal signal variations with noise
+   - Degraded and critical scenarios
+   - Dying gasp events
+   - Fiber cut and restore scenarios
+
+2. **DOCSIS Channel Simulation**
+   - Multi-channel SNR and power tracking
+   - Plant issues and ranging problems
+   - T3/T4 timeout events
+   - Partial service mode
+   - Registration flow
+
+3. **Router Resource Simulation**
+   - CPU and memory load profiles
+   - Interface traffic statistics
+   - Connection tracking
+   - Load ramp simulation
+
+4. **Device-Specific Events**
+   - PON: optical alarms, link state, ONU registration
+   - DOCSIS: timeout events, FEC errors, channel bonding
+   - Router: WAN/LAN events, DHCP, resource alarms
+
+5. **Integration Patterns**
+   - Combined device simulation
+   - Degradation cascades
+   - Periodic health checks

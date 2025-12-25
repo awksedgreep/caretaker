@@ -12,7 +12,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:caretaker, "~> 0.1"}
+    {:caretaker, "~> 0.2"}
   ]
 end
 ```

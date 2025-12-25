@@ -157,8 +157,8 @@ events
 
 ```elixir
 DynamicBehavior.stop_behaviors(behavior)
-DynamicBehavior.stop(behavior)
-DeviceState.stop(state)
+GenServer.stop(behavior)
+Agent.stop(state)
 
 Logger.info("Cleanup complete")
 :ok

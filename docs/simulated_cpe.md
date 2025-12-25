@@ -177,7 +177,7 @@ respond_to_rpc("GetParameterNames", ...)
 
 # GetRPCMethods ✅
 respond_to_rpc("GetRPCMethods", ...)
-# Returns: ["GetRPCMethods", "GetParameterValues", "GetParameterNames", 
+# Returns: ["GetRPCMethods", "GetParameterValues", "GetParameterNames",
 #           "SetParameterValues", "Inform", "GetParameterAttributes",
 #           "SetParameterAttributes", "AddObject", "DeleteObject"]
 
@@ -203,7 +203,7 @@ respond_to_rpc("DeleteObject", %{path: "Device.IP.Interface.3."})
 - `lib/caretaker/cpe/client.ex` - Added handlers for GetParameterNames, GetRPCMethods, GetParameterAttributes, SetParameterAttributes, AddObject, DeleteObject
 - `lib/caretaker/acs/server.ex` - Added handlers for all RPC response types (204 acknowledgements)
 - `lib/caretaker/tr069/rpc/add_object.ex` - Added decode/1 function
-- `lib/caretaker/tr069/rpc/delete_object.ex` - Added decode/1 function  
+- `lib/caretaker/tr069/rpc/delete_object.ex` - Added decode/1 function
 - `test/cpe_rpc_suite_test.exs` - 19 tests covering all Phase 2 functionality
 
 **Success Criteria:**
@@ -283,7 +283,7 @@ FirmwareSimulator.current_version(sim)   # "2.0.0"
 
 #### 3.4 Reboot Simulation ✅ COMPLETE
 - ✅ Handle Reboot RPC
-- ✅ Respond with RebootResponse  
+- ✅ Respond with RebootResponse
 - ✅ Trigger FirmwareSimulator.start_reboot/1
 - ✅ After reboot_delay, state transitions to :upgraded
 - ✅ Version updated to target_version
@@ -380,7 +380,7 @@ Client.run_session(acs_url, device_id: device_id, device_state: state)
   device_state: device_state,
   behaviors: [
     periodic_inform: [interval: 300_000, jitter: 30_000],
-    dynamic_params: ["Device.DeviceInfo.UpTime", 
+    dynamic_params: ["Device.DeviceInfo.UpTime",
                      "Device.IP.Interface.1.Stats.BytesSent",
                      "Device.IP.Interface.1.Stats.BytesReceived"],
     value_change_events: true
@@ -488,7 +488,7 @@ Caretaker.CPE.Fleet
 
 # Check fleet status
 Fleet.stats(fleet)
-# => %{total: 100, spawned: 100, connected: 0, stopped: 0, 
+# => %{total: 100, spawned: 100, connected: 0, stopped: 0,
 #      memory_delta_bytes: 45_000_000, memory_per_device_bytes: 450_000, ...}
 
 # Per-device operations
@@ -534,13 +534,29 @@ devices = Fleet.list_devices(fleet)
 
 ---
 
-## Phase 6: Advanced Testing Features
+## Phase 6: Device Integration Tests & Advanced Testing Features
 
-**Goal:** Tools for sophisticated ACS testing scenarios.
+**Goal:** Device-specific integration tests (Phase 6.1) and tools for sophisticated ACS testing scenarios (Phase 6.2).
+
+### Phase 6.1: Device Integration Tests ✅ COMPLETE
+
+**Status:** ✅ All deliverables complete. See `docs/extra_device_support.md` for details.
+
+Device-specific integration tests have been implemented using the CPE simulator:
+- GPON/XGPON ONT integration tests (6 tests)
+- DOCSIS cable modem integration tests (8 tests)
+- Mikrotik RouterOS integration tests (8 tests)
+- Quirks module tests (44 tests)
+
+**Total:** 66 new tests added for device-specific functionality.
+
+---
+
+### Phase 6.2: Scenario Engine & Failure Injection (NOT STARTED)
 
 ### Deliverables
 
-#### 6.1 Scenario Engine
+#### 6.2.1 Scenario Engine
 Pre-defined test scenarios:
 ```elixir
 Caretaker.CPE.Scenario.run(:firmware_upgrade,
@@ -565,7 +581,7 @@ Common scenarios:
 - `connection_recovery` - Reconnection after failure
 - `diagnostic_flow` - Run ping/traceroute diagnostics
 
-#### 6.2 Failure Injection
+#### 6.2.2 Failure Injection
 ```elixir
 Device.inject_failures(
   disconnect: %{probability: 0.05, timing: :during_rpc},
@@ -575,19 +591,19 @@ Device.inject_failures(
 )
 ```
 
-#### 6.3 Network Simulation
+#### 6.2.3 Network Simulation
 - Latency injection (min/max range)
 - Packet loss simulation
 - Bandwidth throttling
 
-#### 6.4 Performance Profiling
+#### 6.2.4 Performance Profiling
 ```elixir
 {:ok, profile} = LoadTest.run(
   clients: 500,
   duration: :timer.minutes(10),
   ramp_up: :timer.seconds(30),
   profile: :realistic,
-  
+
   collect: [:response_times, :error_rates, :throughput]
 )
 
@@ -867,7 +883,7 @@ For each phase:
 ## Timeline Estimates
 
 **Phases 1-3 (Core):** 8-11 days
-**Phases 4-6 (Enhanced):** 8-11 days  
+**Phases 4-6 (Enhanced):** 8-11 days
 **Phases 7-8 (Advanced):** 6-8 days
 
 **Total for complete implementation:** 22-30 days

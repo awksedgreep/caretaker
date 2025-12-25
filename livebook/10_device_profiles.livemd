@@ -1,0 +1,619 @@
+# Device Profiles: TR-181 Parameter Templates
+
+> This notebook demonstrates loading and working with device profiles for simulated CPE devices.
+
+Device profiles are JSON files that define the TR-181 parameter tree for different device types.
+Caretaker includes profiles for:
+- **Fiber ONT** - GPON optical network terminals
+- **Cable Modem** - DOCSIS cable modems
+- **MikroTik** - RouterOS-based routers with vendor extensions
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.CPE.{DeviceState, Fleet}
+require Logger
+
+# Define profile paths for easy access
+profiles_dir = Path.join(File.cwd!(), "priv/profiles")
+
+fiber_ont_path = Path.join(profiles_dir, "fiber_ont.json")
+cable_modem_path = Path.join(profiles_dir, "cable_modem.json")
+mikrotik_path = Path.join(profiles_dir, "mikrotik.json")
+
+Logger.info("Profile directory: #{profiles_dir}")
+Logger.info("Available profiles: fiber_ont.json, cable_modem.json, mikrotik.json")
+
+%{
+  profiles_dir: profiles_dir,
+  fiber_ont: fiber_ont_path,
+  cable_modem: cable_modem_path,
+  mikrotik: mikrotik_path
+}
+```
+
+## Section 1: Loading a Fiber ONT Profile
+
+Fiber ONTs (Optical Network Terminals) are common in FTTH deployments.
+This profile includes optical signal parameters and GPON-specific data.
+
+```elixir
+# Create a device state and load the fiber ONT profile
+{:ok, fiber_ont} = DeviceState.start_link(
+  device_id: %{
+    oui: "A1B2C3",
+    product_class: "FiberONT",
+    serial_number: "FON123456789"
+  }
+)
+
+# Load the profile from JSON file
+:ok = DeviceState.load_profile(fiber_ont, fiber_ont_path)
+
+Logger.info("Loaded Fiber ONT profile")
+
+# Check basic device info
+manufacturer = DeviceState.get(fiber_ont, "Device.DeviceInfo.Manufacturer")
+model = DeviceState.get(fiber_ont, "Device.DeviceInfo.ModelName")
+software = DeviceState.get(fiber_ont, "Device.DeviceInfo.SoftwareVersion")
+
+Logger.info("Manufacturer: #{manufacturer}")
+Logger.info("Model: #{model}")
+Logger.info("Software Version: #{software}")
+
+# Check fiber-specific optical parameters
+optical_signal = DeviceState.get(fiber_ont, "Device.Optical.Interface.1.OpticalSignalLevel")
+transmit_level = DeviceState.get(fiber_ont, "Device.Optical.Interface.1.TransmitOpticalLevel")
+
+Logger.info("Optical Signal Level: #{optical_signal} dBm")
+Logger.info("Transmit Optical Level: #{transmit_level} dBm")
+
+%{
+  manufacturer: manufacturer,
+  model: model,
+  software: software,
+  optical_signal_dbm: optical_signal,
+  transmit_level_dbm: transmit_level
+}
+```
+
+## Section 2: Loading a Cable Modem Profile
+
+Cable modems use DOCSIS technology with downstream/upstream channel configurations.
+
+```elixir
+# Create a cable modem device
+{:ok, cable_modem} = DeviceState.start_link(
+  device_id: %{
+    oui: "D4E5F6",
+    product_class: "CableModem",
+    serial_number: "CM987654321"
+  }
+)
+
+:ok = DeviceState.load_profile(cable_modem, cable_modem_path)
+
+Logger.info("Loaded Cable Modem profile")
+
+# Check device info
+manufacturer = DeviceState.get(cable_modem, "Device.DeviceInfo.Manufacturer")
+model = DeviceState.get(cable_modem, "Device.DeviceInfo.ModelName")
+docsis_version = DeviceState.get(cable_modem, "Device.CableModem.DOCSISVersion")
+
+Logger.info("Manufacturer: #{manufacturer}")
+Logger.info("Model: #{model}")
+Logger.info("DOCSIS Version: #{docsis_version}")
+
+# Check downstream channel parameters
+downstream_freq = DeviceState.get(cable_modem, "Device.CableModem.DownstreamChannel.1.Frequency")
+downstream_power = DeviceState.get(cable_modem, "Device.CableModem.DownstreamChannel.1.PowerLevel")
+downstream_snr = DeviceState.get(cable_modem, "Device.CableModem.DownstreamChannel.1.SNRLevel")
+modulation = DeviceState.get(cable_modem, "Device.CableModem.DownstreamChannel.1.Modulation")
+
+Logger.info("Downstream Frequency: #{downstream_freq} Hz")
+Logger.info("Downstream Power: #{downstream_power} dBmV")
+Logger.info("Downstream SNR: #{downstream_snr} dB")
+Logger.info("Modulation: #{modulation}")
+
+%{
+  manufacturer: manufacturer,
+  model: model,
+  docsis_version: docsis_version,
+  downstream: %{
+    frequency_hz: downstream_freq,
+    power_dbmv: downstream_power,
+    snr_db: downstream_snr,
+    modulation: modulation
+  }
+}
+```
+
+## Section 3: Loading a MikroTik Profile
+
+MikroTik routers have extensive TR-181 support plus vendor-specific extensions (X_MIKROTIK_*).
+
+```elixir
+# Create a MikroTik router device
+{:ok, mikrotik} = DeviceState.start_link(
+  device_id: %{
+    oui: "D4CA6D",
+    product_class: "RouterOS",
+    serial_number: "A1B2C3D4E5F6"
+  }
+)
+
+:ok = DeviceState.load_profile(mikrotik, mikrotik_path)
+
+Logger.info("Loaded MikroTik profile")
+
+# Check device info with vendor extensions
+manufacturer = DeviceState.get(mikrotik, "Device.DeviceInfo.Manufacturer")
+model = DeviceState.get(mikrotik, "Device.DeviceInfo.ModelName")
+board_name = DeviceState.get(mikrotik, "Device.DeviceInfo.X_MIKROTIK_BoardName")
+architecture = DeviceState.get(mikrotik, "Device.DeviceInfo.X_MIKROTIK_Architecture")
+cpu_count = DeviceState.get(mikrotik, "Device.DeviceInfo.X_MIKROTIK_CPUCount")
+license_level = DeviceState.get(mikrotik, "Device.DeviceInfo.X_MIKROTIK_License")
+
+Logger.info("Manufacturer: #{manufacturer}")
+Logger.info("Model: #{model}")
+Logger.info("Board Name: #{board_name}")
+Logger.info("Architecture: #{architecture}")
+Logger.info("CPU Count: #{cpu_count}")
+Logger.info("License Level: #{license_level}")
+
+# Check system resources
+cpu_usage = DeviceState.get(mikrotik, "Device.DeviceInfo.ProcessStatus.CPUUsage")
+memory_total = DeviceState.get(mikrotik, "Device.DeviceInfo.MemoryStatus.Total")
+memory_free = DeviceState.get(mikrotik, "Device.DeviceInfo.MemoryStatus.Free")
+
+Logger.info("CPU Usage: #{cpu_usage}%")
+Logger.info("Memory: #{memory_free}/#{memory_total} KB free")
+
+%{
+  manufacturer: manufacturer,
+  model: model,
+  vendor_extensions: %{
+    board_name: board_name,
+    architecture: architecture,
+    cpu_count: cpu_count,
+    license_level: license_level
+  },
+  resources: %{
+    cpu_usage_pct: cpu_usage,
+    memory_total_kb: memory_total,
+    memory_free_kb: memory_free
+  }
+}
+```
+
+## Section 4: Exploring Profile Parameters
+
+DeviceState provides multiple ways to query parameters:
+- `get/2` - Get a single parameter value
+- `get_tree/2` - Get all parameters under a path as a nested map
+- `get_parameters/2` - Get parameters as a flat list with types
+
+```elixir
+# Use get_tree to explore a subtree
+Logger.info("=== Exploring MikroTik Routing Configuration ===")
+
+routing_tree = DeviceState.get_tree(mikrotik, "Device.Routing.")
+Logger.info("Routing tree keys: #{inspect(Map.keys(routing_tree))}")
+
+# Get IPv4 forwarding rules
+ipv4_forwarding = DeviceState.get_tree(mikrotik, "Device.Routing.Router.1.IPv4Forwarding.")
+Logger.info("IPv4 Forwarding entries: #{map_size(ipv4_forwarding)}")
+
+# Get the default route details
+default_route = DeviceState.get_tree(mikrotik, "Device.Routing.Router.1.IPv4Forwarding.1.")
+Logger.info("Default route: #{inspect(default_route)}")
+
+%{
+  routing_tree: routing_tree,
+  ipv4_forwarding_count: map_size(ipv4_forwarding),
+  default_route: default_route
+}
+```
+
+```elixir
+# Use get_parameters to get a flat list with type information
+Logger.info("=== Using get_parameters for Flat Parameter Lists ===")
+
+# Get all DeviceInfo parameters as a flat list
+device_info_params = DeviceState.get_parameters(fiber_ont, "Device.DeviceInfo.")
+
+Logger.info("Found #{length(device_info_params)} parameters under Device.DeviceInfo")
+
+# Show first 5 parameters with their types
+device_info_params
+|> Enum.take(5)
+|> Enum.each(fn param ->
+  Logger.info("  #{param.name} = #{param.value} (#{param.type})")
+end)
+
+device_info_params
+```
+
+```elixir
+# Use get_parameter_names for discovery
+Logger.info("=== Parameter Name Discovery ===")
+
+# Get immediate children (next_level: true)
+children = DeviceState.get_parameter_names(mikrotik, "Device.", true)
+Logger.info("Device. children: #{length(children)}")
+Enum.each(children, fn p -> Logger.info("  #{p.name}") end)
+
+# Get all leaf parameters (next_level: false)
+all_ip_params = DeviceState.get_parameter_names(mikrotik, "Device.IP.", false)
+Logger.info("\nAll Device.IP parameters: #{length(all_ip_params)}")
+
+%{
+  device_children: children,
+  ip_param_count: length(all_ip_params)
+}
+```
+
+## Section 5: Comparing Device Capabilities
+
+Different device types have different parameter trees. Let's compare them.
+
+```elixir
+Logger.info("=== Device Capability Comparison ===")
+
+# Get top-level tree keys for each device
+fiber_keys = DeviceState.get_tree(fiber_ont, "Device.") |> Map.keys() |> Enum.sort()
+cable_keys = DeviceState.get_tree(cable_modem, "Device.") |> Map.keys() |> Enum.sort()
+mikrotik_keys = DeviceState.get_tree(mikrotik, "Device.") |> Map.keys() |> Enum.sort()
+
+Logger.info("Fiber ONT top-level: #{inspect(fiber_keys)}")
+Logger.info("Cable Modem top-level: #{inspect(cable_keys)}")
+Logger.info("MikroTik top-level: #{inspect(mikrotik_keys)}")
+
+# Find device-specific capabilities
+fiber_only = fiber_keys -- cable_keys -- mikrotik_keys
+cable_only = cable_keys -- fiber_keys -- mikrotik_keys
+mikrotik_only = mikrotik_keys -- fiber_keys -- cable_keys
+common = fiber_keys -- fiber_only
+
+Logger.info("\nFiber ONT specific: #{inspect(fiber_only)}")
+Logger.info("Cable Modem specific: #{inspect(cable_only)}")
+Logger.info("MikroTik specific: #{inspect(mikrotik_only)}")
+Logger.info("Common to all: #{inspect(common)}")
+
+%{
+  fiber_ont: fiber_keys,
+  cable_modem: cable_keys,
+  mikrotik: mikrotik_keys,
+  fiber_only: fiber_only,
+  cable_only: cable_only,
+  mikrotik_only: mikrotik_only,
+  common: common
+}
+```
+
+```elixir
+# Compare interface statistics across devices
+Logger.info("=== Interface Statistics Comparison ===")
+
+# Get interface stats from each device
+fiber_stats = DeviceState.get_tree(fiber_ont, "Device.IP.Interface.1.Stats.")
+cable_stats = DeviceState.get_tree(cable_modem, "Device.IP.Interface.1.Stats.")
+mikrotik_stats = DeviceState.get_tree(mikrotik, "Device.IP.Interface.1.Stats.")
+
+# Compare bytes sent/received
+devices_stats = [
+  {"Fiber ONT", fiber_stats},
+  {"Cable Modem", cable_stats},
+  {"MikroTik", mikrotik_stats}
+]
+
+Enum.each(devices_stats, fn {name, stats} ->
+  bytes_sent = Map.get(stats, "BytesSent", 0)
+  bytes_recv = Map.get(stats, "BytesReceived", 0)
+  Logger.info("#{name}: Sent=#{bytes_sent} bytes, Received=#{bytes_recv} bytes")
+end)
+
+%{
+  fiber_ont: fiber_stats,
+  cable_modem: cable_stats,
+  mikrotik: mikrotik_stats
+}
+```
+
+## Section 6: Creating Custom Profiles from Maps
+
+You can create device profiles programmatically using Elixir maps.
+
+```elixir
+# Define a custom profile as a map
+custom_profile = %{
+  "Device" => %{
+    "DeviceInfo" => %{
+      "Manufacturer" => "CustomVendor",
+      "ManufacturerOUI" => "CUSTOM",
+      "ModelName" => "CUSTOM-ROUTER-X1",
+      "Description" => "Custom Router for Testing",
+      "ProductClass" => "CustomRouter",
+      "SerialNumber" => "CUSTOM001",
+      "HardwareVersion" => "1.0",
+      "SoftwareVersion" => "3.2.1",
+      "UpTime" => 3600
+    },
+    "ManagementServer" => %{
+      "URL" => "http://acs.custom.com:7547/",
+      "Username" => "custom_user",
+      "PeriodicInformEnable" => true,
+      "PeriodicInformInterval" => 600
+    },
+    "IP" => %{
+      "Interface" => %{
+        "1" => %{
+          "Enable" => true,
+          "Status" => "Up",
+          "Name" => "wan0",
+          "IPv4Address" => %{
+            "1" => %{
+              "Enable" => true,
+              "IPAddress" => "203.0.113.50",
+              "SubnetMask" => "255.255.255.0"
+            }
+          }
+        }
+      }
+    },
+    # Custom vendor extensions
+    "X_CUSTOM_Features" => %{
+      "AdvancedRouting" => true,
+      "QoSEnabled" => true,
+      "MaxConnections" => 10000
+    }
+  }
+}
+
+# Create device with custom profile params
+{:ok, custom_device} = DeviceState.start_link(
+  device_id: %{
+    oui: "CUSTOM",
+    product_class: "CustomRouter",
+    serial_number: "CUSTOM001"
+  },
+  params: custom_profile
+)
+
+Logger.info("Created custom device with inline profile")
+
+# Verify custom parameters
+manufacturer = DeviceState.get(custom_device, "Device.DeviceInfo.Manufacturer")
+custom_feature = DeviceState.get(custom_device, "Device.X_CUSTOM_Features.AdvancedRouting")
+max_connections = DeviceState.get(custom_device, "Device.X_CUSTOM_Features.MaxConnections")
+
+Logger.info("Manufacturer: #{manufacturer}")
+Logger.info("Advanced Routing: #{custom_feature}")
+Logger.info("Max Connections: #{max_connections}")
+
+%{
+  manufacturer: manufacturer,
+  custom_features: %{
+    advanced_routing: custom_feature,
+    max_connections: max_connections
+  }
+}
+```
+
+## Section 7: Modifying Parameters and Checking Persistence
+
+DeviceState maintains parameter changes in memory.
+
+```elixir
+Logger.info("=== Parameter Modification and Persistence ===")
+
+# Get original value
+original_version = DeviceState.get(fiber_ont, "Device.DeviceInfo.SoftwareVersion")
+Logger.info("Original SoftwareVersion: #{original_version}")
+
+# Update the parameter
+DeviceState.set(fiber_ont, "Device.DeviceInfo.SoftwareVersion", "3.0.0-upgraded")
+
+# Verify the change persisted
+new_version = DeviceState.get(fiber_ont, "Device.DeviceInfo.SoftwareVersion")
+Logger.info("New SoftwareVersion: #{new_version}")
+
+# Update multiple parameters
+DeviceState.update_parameters(fiber_ont, [
+  %{name: "Device.DeviceInfo.ProvisioningCode", value: "PROV-2024-001"},
+  %{name: "Device.DeviceInfo.Description", value: "Updated Fiber ONT"},
+  %{name: "Device.IP.Interface.1.IPv4Address.1.IPAddress", value: "192.168.1.200"}
+])
+
+# Verify all changes
+prov_code = DeviceState.get(fiber_ont, "Device.DeviceInfo.ProvisioningCode")
+description = DeviceState.get(fiber_ont, "Device.DeviceInfo.Description")
+ip_address = DeviceState.get(fiber_ont, "Device.IP.Interface.1.IPv4Address.1.IPAddress")
+
+Logger.info("Provisioning Code: #{prov_code}")
+Logger.info("Description: #{description}")
+Logger.info("IP Address: #{ip_address}")
+
+%{
+  original_version: original_version,
+  new_version: new_version,
+  provisioning_code: prov_code,
+  description: description,
+  ip_address: ip_address
+}
+```
+
+```elixir
+# Adding and deleting object instances
+Logger.info("=== Object Instance Management ===")
+
+# Add a new IP interface instance
+{:ok, instance_num} = DeviceState.add_object_instance(fiber_ont, "Device.IP.Interface.")
+Logger.info("Added new interface instance: #{instance_num}")
+
+# Configure the new interface
+DeviceState.set(fiber_ont, "Device.IP.Interface.#{instance_num}.Enable", true)
+DeviceState.set(fiber_ont, "Device.IP.Interface.#{instance_num}.Name", "eth1")
+DeviceState.set(fiber_ont, "Device.IP.Interface.#{instance_num}.Status", "Up")
+
+# Verify the new interface
+new_interface = DeviceState.get_tree(fiber_ont, "Device.IP.Interface.#{instance_num}.")
+Logger.info("New interface config: #{inspect(new_interface)}")
+
+# List all interfaces now
+interfaces = DeviceState.get_tree(fiber_ont, "Device.IP.Interface.")
+Logger.info("Total interfaces: #{map_size(interfaces)}")
+
+# Delete the instance
+:ok = DeviceState.delete_object_instance(fiber_ont, "Device.IP.Interface.#{instance_num}.")
+Logger.info("Deleted interface instance #{instance_num}")
+
+# Verify deletion
+remaining = DeviceState.get_tree(fiber_ont, "Device.IP.Interface.")
+Logger.info("Remaining interfaces: #{map_size(remaining)}")
+
+%{
+  added_instance: instance_num,
+  interface_config: new_interface,
+  final_interface_count: map_size(remaining)
+}
+```
+
+## Section 8: Using Profiles with Fleet for Mixed-Device Testing
+
+The Fleet module supports mixed device populations using profile distributions.
+
+```elixir
+Logger.info("=== Fleet with Mixed Device Profiles ===")
+
+# Create a fleet with multiple device types
+{:ok, mixed_fleet} = Fleet.start_link(
+  acs_url: "http://localhost:4000/cwmp",
+  count: 10,
+  oui_prefix: "MIXED",
+  connection_delay: 10,  # Fast spawning for demo
+  profiles: [
+    {40, :fiber_ont},     # 40% fiber ONTs
+    {30, :cable_modem},   # 30% cable modems
+    {30, :mikrotik}       # 30% MikroTik routers (uses default params)
+  ]
+)
+
+Logger.info("Created mixed fleet")
+
+# Spawn all devices
+{:ok, count} = Fleet.spawn_devices(mixed_fleet)
+Logger.info("Spawned #{count} devices")
+
+# List devices and their profiles
+devices = Fleet.list_devices(mixed_fleet)
+Logger.info("\nDevice distribution:")
+
+profile_counts = Enum.reduce(devices, %{}, fn device, acc ->
+  Map.update(acc, device.profile, 1, &(&1 + 1))
+end)
+
+Enum.each(profile_counts, fn {profile, count} ->
+  Logger.info("  #{profile}: #{count} devices")
+end)
+
+%{
+  total_devices: length(devices),
+  profile_distribution: profile_counts
+}
+```
+
+```elixir
+# Query parameters across different device types in the fleet
+Logger.info("=== Querying Fleet Devices by Type ===")
+
+# Get a device of each type
+devices = Fleet.list_devices(mixed_fleet)
+
+fiber_device = Enum.find(devices, fn d -> d.profile == :fiber_ont end)
+cable_device = Enum.find(devices, fn d -> d.profile == :cable_modem end)
+
+Logger.info("Found devices:")
+Logger.info("  Fiber ONT: #{fiber_device && fiber_device.serial_number}")
+Logger.info("  Cable Modem: #{cable_device && cable_device.serial_number}")
+
+# Update a parameter on all fiber ONTs
+Fleet.update_all_params(mixed_fleet, "Device.DeviceInfo.ProvisioningCode", "FLEET-PROV-2024")
+
+Logger.info("Updated provisioning code on all fleet devices")
+
+# Get fleet statistics
+stats = Fleet.stats(mixed_fleet)
+
+Logger.info("""
+Fleet Statistics:
+  Total: #{stats.total}
+  Spawned: #{stats.spawned}
+  Memory delta: #{if stats.memory_delta_bytes, do: Float.round(stats.memory_delta_bytes / 1024, 2), else: "N/A"} KB
+  Memory per device: #{if stats.memory_per_device_bytes, do: Float.round(stats.memory_per_device_bytes / 1024, 2), else: "N/A"} KB
+""")
+
+stats
+```
+
+```elixir
+# Add a device with a custom inline profile to the fleet
+Logger.info("=== Adding Custom Profile Device to Fleet ===")
+
+custom_router_profile = %{
+  "Device" => %{
+    "DeviceInfo" => %{
+      "Manufacturer" => "FleetCustom",
+      "ModelName" => "CUSTOM-FLEET-01",
+      "Description" => "Dynamically added custom device",
+      "SoftwareVersion" => "1.0.0"
+    },
+    "ManagementServer" => %{
+      "PeriodicInformEnable" => true,
+      "PeriodicInformInterval" => 300
+    }
+  }
+}
+
+# Add with custom profile (map is passed as the profile)
+{:ok, custom_serial} = Fleet.add_device(mixed_fleet,
+  serial_number: "CUSTOM-FLEET-001",
+  profile: custom_router_profile
+)
+
+Logger.info("Added custom device: #{custom_serial}")
+
+# Verify the device was added
+{:ok, custom_info} = Fleet.get_device(mixed_fleet, custom_serial)
+Logger.info("Custom device info: #{inspect(custom_info)}")
+
+# Get updated device list
+devices = Fleet.list_devices(mixed_fleet)
+Logger.info("Total fleet size now: #{length(devices)}")
+
+%{
+  custom_serial: custom_serial,
+  custom_info: custom_info,
+  total_devices: length(devices)
+}
+```
+
+## Cleanup
+
+```elixir
+# Stop all fleet devices
+Fleet.stop_all(mixed_fleet)
+
+# Stop individual device agents
+Agent.stop(fiber_ont)
+Agent.stop(cable_modem)
+Agent.stop(mikrotik)
+Agent.stop(custom_device)
+
+Logger.info("All devices stopped and cleaned up")
+:ok
+```

@@ -41,8 +41,7 @@ dev_key = {"A1B2C3", "Router", "XYZ123"}
 
 model = Caretaker.TR181.Store.get(dev_key)
 
-manuf = get_in(model, ["Device", "DeviceInfo", "Manufacturer"]) ||
-        get_in(model, ["Device.DeviceInfo.Manufacturer"]) # depending on shape
+manuf = get_in(model, ["Device", "DeviceInfo", "Manufacturer"])
 
 Logger.info("Manufacturer=#{inspect(manuf)}")
 %{manufacturer: manuf, param_count: length(data.parameters)}

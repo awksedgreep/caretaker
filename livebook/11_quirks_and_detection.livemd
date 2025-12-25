@@ -1,0 +1,593 @@
+# Device Quirks and Detection
+
+> This notebook demonstrates Caretaker's device detection and vendor-specific quirks system.
+> Learn how to identify device types from Inform messages and handle vendor-specific TR-069 implementations.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.ACS.{DeviceDetection, ParameterMapping}
+alias Caretaker.Quirks
+alias Caretaker.Quirks.Mikrotik
+alias Caretaker.TR069.RPC.Inform
+require Logger
+```
+
+## Device Detection from Inform Data
+
+The `DeviceDetection` module identifies device types from Inform messages using OUI (Organizationally Unique Identifier), manufacturer string, and product class.
+
+### Mikrotik RouterOS Detection
+
+```elixir
+# Simulate an Inform from a Mikrotik device
+# Mikrotik uses OUIs like D4CA6D, 2CC81B, E48D8C
+mikrotik_inform = %Inform{
+  device_id: %{
+    oui: "D4CA6D",
+    manufacturer: "MikroTik",
+    product_class: "RouterOS",
+    serial_number: "HEX123456789"
+  },
+  current_time: DateTime.utc_now(),
+  retry_count: 0,
+  event_codes: ["0 BOOTSTRAP"],
+  max_envelopes: 1,
+  parameter_list: [
+    {"Device.DeviceInfo.ModelName", "RB4011iGS+"},
+    {"Device.DeviceInfo.SoftwareVersion", "7.12.1"}
+  ]
+}
+
+device_info = DeviceDetection.detect(mikrotik_inform)
+Logger.info("Detected device: #{inspect(device_info.type)}")
+Logger.info("Manufacturer: #{device_info.manufacturer}")
+Logger.info("Model: #{device_info.model}")
+Logger.info("Software: #{device_info.software_version}")
+device_info
+```
+
+### GPON ONT Detection
+
+```elixir
+# Simulate an Inform from a Huawei GPON ONT
+huawei_inform = %Inform{
+  device_id: %{
+    oui: "00E0FC",
+    manufacturer: "Huawei Technologies Co., Ltd",
+    product_class: "GPON ONT",
+    serial_number: "HWTC12345678"
+  },
+  current_time: DateTime.utc_now(),
+  retry_count: 0,
+  event_codes: ["2 PERIODIC"],
+  max_envelopes: 1,
+  parameter_list: [
+    {"Device.DeviceInfo.ModelName", "HG8145V5"},
+    {"Device.DeviceInfo.SoftwareVersion", "V5R020C00S125"}
+  ]
+}
+
+huawei_device = DeviceDetection.detect(huawei_inform)
+Logger.info("Detected device: #{inspect(huawei_device.type)}")
+Logger.info("This is a GPON ONT from: #{elem(huawei_device.type, 1)}")
+huawei_device
+```
+
+### Cable Modem Detection
+
+```elixir
+# Simulate an Inform from an Arris cable modem
+arris_inform = %Inform{
+  device_id: %{
+    oui: "0015A4",
+    manufacturer: "Arris",
+    product_class: "DOCSIS CM",
+    serial_number: "ARRS87654321"
+  },
+  current_time: DateTime.utc_now(),
+  retry_count: 0,
+  event_codes: ["1 BOOT"],
+  max_envelopes: 1,
+  parameter_list: [
+    {"Device.DeviceInfo.ModelName", "SB8200"},
+    {"Device.DeviceInfo.SoftwareVersion", "9.1.103.0"}
+  ]
+}
+
+arris_device = DeviceDetection.detect(arris_inform)
+Logger.info("Detected device: #{inspect(arris_device.type)}")
+Logger.info("This is a DOCSIS modem from: #{elem(arris_device.type, 1)}")
+arris_device
+```
+
+### Generic/Unknown Device
+
+```elixir
+# Simulate an Inform from an unknown device
+unknown_inform = %Inform{
+  device_id: %{
+    oui: "AABBCC",
+    manufacturer: "Unknown Vendor",
+    product_class: "Widget",
+    serial_number: "UNKN00001"
+  },
+  current_time: DateTime.utc_now(),
+  retry_count: 0,
+  event_codes: ["2 PERIODIC"],
+  max_envelopes: 1,
+  parameter_list: []
+}
+
+unknown_device = DeviceDetection.detect(unknown_inform)
+Logger.info("Detected device: #{inspect(unknown_device.type)}")
+Logger.info("Falls back to generic/unknown for unrecognized devices")
+unknown_device
+```
+
+## Using the Quirks Registry
+
+The `Quirks` module provides a central registry for vendor-specific adaptations.
+
+### Looking Up Quirks by OUI
+
+```elixir
+# Check if quirks exist for a specific OUI
+mikrotik_oui = "D4CA6D"
+quirks_module = Quirks.get_quirks(mikrotik_oui)
+Logger.info("Quirks module for #{mikrotik_oui}: #{inspect(quirks_module)}")
+
+# OUI lookup is case-insensitive
+lowercase_result = Quirks.get_quirks("d4ca6d")
+Logger.info("Case-insensitive lookup works: #{quirks_module == lowercase_result}")
+
+# Check an unknown OUI
+unknown_quirks = Quirks.get_quirks("AABBCC")
+Logger.info("Unknown OUI returns: #{inspect(unknown_quirks)}")
+```
+
+### List All Registered OUIs
+
+```elixir
+# Get all OUIs that have registered quirks
+registered = Quirks.registered_ouis()
+Logger.info("Registered OUIs with quirks: #{inspect(registered)}")
+```
+
+### Get Vendor Information
+
+```elixir
+# Get detailed vendor info for an OUI
+vendor_info = Quirks.vendor_info("D4CA6D")
+Logger.info("Vendor: #{vendor_info.name}")
+Logger.info("Quirks module: #{inspect(vendor_info.quirks_module)}")
+Logger.info("Supported parameters count: #{vendor_info.supported_parameters_count}")
+vendor_info
+```
+
+## Mikrotik Quirks: Limited TR-181 Support
+
+Mikrotik RouterOS has a limited TR-069 implementation. The `Mikrotik` quirks module documents these limitations.
+
+### Supported Parameters
+
+```elixir
+# Get the list of parameters Mikrotik actually supports
+supported = Mikrotik.supported_parameters()
+Logger.info("Mikrotik supports #{length(supported)} TR-181 parameters")
+
+# Show a sample of supported parameters by category
+device_info_params = Enum.filter(supported, &String.starts_with?(&1, "Device.DeviceInfo"))
+mgmt_params = Enum.filter(supported, &String.starts_with?(&1, "Device.ManagementServer"))
+ethernet_params = Enum.filter(supported, &String.starts_with?(&1, "Device.Ethernet"))
+
+Logger.info("DeviceInfo params: #{length(device_info_params)}")
+Logger.info("ManagementServer params: #{length(mgmt_params)}")
+Logger.info("Ethernet params: #{length(ethernet_params)}")
+
+%{
+  device_info: device_info_params,
+  management_server: mgmt_params,
+  ethernet: Enum.take(ethernet_params, 5)
+}
+```
+
+### Checking Parameter Support
+
+```elixir
+# Check if specific parameters are supported
+test_params = [
+  "Device.ManagementServer.URL",
+  "Device.DeviceInfo.Manufacturer",
+  "Device.WiFi.Radio.1.Channel",
+  "Device.Firewall.Chain.1.Rule.1.Enable",
+  "Device.NAT.PortMapping.1.Enable"
+]
+
+for param <- test_params do
+  supported? = Mikrotik.supported_parameter?(param)
+  # Also check via the Quirks dispatcher
+  via_quirks = Quirks.supported_parameter?("D4CA6D", param)
+  Logger.info("#{param}: supported=#{supported?} (via Quirks: #{via_quirks})")
+end
+
+:ok
+```
+
+### Pattern Matching for Indexed Parameters
+
+```elixir
+# Mikrotik supports pattern-based parameters like Device.Ethernet.Interface.{i}.*
+# The quirks module matches actual indices to patterns
+
+indexed_params = [
+  "Device.Ethernet.Interface.1.Enable",
+  "Device.Ethernet.Interface.2.MACAddress",
+  "Device.IP.Interface.3.IPv4Address.1.IPAddress"
+]
+
+for param <- indexed_params do
+  supported? = Mikrotik.supported_parameter?(param)
+  Logger.info("#{param}: #{if supported?, do: "SUPPORTED", else: "NOT SUPPORTED"}")
+end
+
+:ok
+```
+
+### Parameter Notes and Limitations
+
+```elixir
+# Get vendor-specific notes about parameters
+param_to_check = "Device.ManagementServer.PeriodicInformInterval"
+notes = Mikrotik.parameter_notes(param_to_check)
+Logger.info("Notes for #{param_to_check}:")
+for note <- notes do
+  Logger.info("  - #{note}")
+end
+
+# Check notes via the Quirks dispatcher
+quirks_notes = Quirks.parameter_notes("D4CA6D", param_to_check)
+Logger.info("Same notes via Quirks dispatcher: #{length(quirks_notes)} notes")
+```
+
+### Alternative Approaches for Unsupported Features
+
+```elixir
+# For unsupported parameters, Mikrotik provides alternative approaches
+unsupported_areas = [
+  "Device.WiFi.Radio.1.Channel",
+  "Device.Firewall.Chain.1.Rule.1.Enable",
+  "Device.NAT.PortMapping.1.Enable",
+  "Device.DHCPv4.Server.Pool.1.Enable"
+]
+
+for param <- unsupported_areas do
+  case Mikrotik.alternative_approach(param) do
+    {:script, description, command} ->
+      Logger.info("#{param}:")
+      Logger.info("  Alternative: #{description}")
+      Logger.info("  Command: #{command}")
+
+    {:read_only, reason} ->
+      Logger.info("#{param}: Read-only - #{reason}")
+
+    :unsupported ->
+      Logger.info("#{param}: No alternative available")
+  end
+end
+
+:ok
+```
+
+### Generating RouterOS Scripts
+
+```elixir
+# For advanced configuration, generate RouterOS scripts
+firewall_script = Mikrotik.generate_script(:firewall_rule, %{
+  chain: "input",
+  protocol: "tcp",
+  dst_port: 22,
+  action: "accept"
+})
+
+Logger.info("Generated firewall script:")
+IO.puts(firewall_script)
+
+# NAT masquerade script
+nat_script = Mikrotik.generate_script(:nat_masquerade, %{
+  out_interface: "ether1"
+})
+
+Logger.info("Generated NAT script:")
+IO.puts(nat_script)
+```
+
+### Firmware Version Checks
+
+```elixir
+# Check if a firmware version supports TR-069 properly
+versions_to_check = ["6.44", "6.45", "7.0", "7.12.1"]
+
+Logger.info("Minimum version: #{Mikrotik.minimum_version()}")
+Logger.info("Recommended version: #{Mikrotik.recommended_version()}")
+
+for version <- versions_to_check do
+  adequate? = Mikrotik.adequate_version?(version)
+  Logger.info("Version #{version}: #{if adequate?, do: "ADEQUATE", else: "TOO OLD"}")
+end
+
+:ok
+```
+
+## Parameter Mapping Between Canonical and Device Paths
+
+The `ParameterMapping` module translates between human-friendly canonical names and device-specific TR-181 paths.
+
+### Mapping Canonical Names to Device Paths
+
+```elixir
+# Define canonical names that work across device types
+canonical_names = [
+  "Device.Manufacturer",
+  "Device.Model",
+  "WAN.IPAddress",
+  "WiFi.SSID",
+  "Management.URL"
+]
+
+# Map to Mikrotik-specific paths
+mikrotik_type = {:mikrotik, :routeros}
+Logger.info("Mikrotik mappings:")
+for name <- canonical_names do
+  path = ParameterMapping.to_device_path(name, mikrotik_type)
+  Logger.info("  #{name} -> #{path}")
+end
+
+# Same canonical names for a Huawei ONT
+huawei_type = {:gpon_ont, :huawei}
+Logger.info("\nHuawei ONT mappings:")
+for name <- canonical_names do
+  path = ParameterMapping.to_device_path(name, huawei_type)
+  Logger.info("  #{name} -> #{path}")
+end
+
+:ok
+```
+
+### PON-Specific Parameters for ONTs
+
+```elixir
+# ONTs have PON-specific parameters that routers don't have
+pon_params = ["PON.RxPower", "PON.TxPower", "PON.Temperature", "PON.Status"]
+
+for device_type <- [{:gpon_ont, :huawei}, {:mikrotik, :routeros}] do
+  Logger.info("Device #{inspect(device_type)}:")
+  for param <- pon_params do
+    path = ParameterMapping.to_device_path(param, device_type)
+    supported? = ParameterMapping.supported?(param, device_type)
+    Logger.info("  #{param}: #{if supported?, do: path, else: "NOT SUPPORTED"}")
+  end
+end
+
+:ok
+```
+
+### DOCSIS Parameters for Cable Modems
+
+```elixir
+# Cable modems have DOCSIS-specific parameters
+docsis_params = [
+  "DOCSIS.Status",
+  "DOCSIS.DownstreamChannels",
+  "DOCSIS.DS1.Frequency",
+  "DOCSIS.DS1.SNR"
+]
+
+arris_type = {:cable_modem, :arris}
+Logger.info("Arris cable modem DOCSIS mappings:")
+for param <- docsis_params do
+  path = ParameterMapping.to_device_path(param, arris_type)
+  Logger.info("  #{param} -> #{path}")
+end
+
+:ok
+```
+
+### Reverse Mapping: Device Path to Canonical Name
+
+```elixir
+# Convert device-specific paths back to canonical names
+device_paths = [
+  "Device.DeviceInfo.Manufacturer",
+  "Device.Optical.Interface.1.OpticalSignalLevel",
+  "Device.IP.Interface.1.IPv4Address.1.IPAddress"
+]
+
+huawei_type = {:gpon_ont, :huawei}
+Logger.info("Reverse mapping for Huawei ONT:")
+for path <- device_paths do
+  canonical = ParameterMapping.from_device_path(path, huawei_type)
+  Logger.info("  #{path}")
+  Logger.info("    -> #{canonical}")
+end
+
+:ok
+```
+
+### Batch Parameter Conversion
+
+```elixir
+# Convert multiple parameters at once
+canonical_list = ["Device.Manufacturer", "Device.Model", "WAN.IPAddress", "PON.RxPower"]
+
+# Batch to device paths
+device_type = {:gpon_ont, :huawei}
+mapped_pairs = ParameterMapping.to_device_paths(canonical_list, device_type)
+
+Logger.info("Batch mapping results:")
+for {canonical, device_path} <- mapped_pairs do
+  Logger.info("  #{canonical} => #{device_path}")
+end
+
+mapped_pairs
+```
+
+### Checking Supported Parameters by Device Type
+
+```elixir
+# List all supported canonical parameters for different device types
+device_types = [
+  {:mikrotik, :routeros},
+  {:gpon_ont, :huawei},
+  {:cable_modem, :arris},
+  {:generic, :unknown}
+]
+
+for device_type <- device_types do
+  params = ParameterMapping.supported_parameters(device_type)
+  Logger.info("#{inspect(device_type)}: #{length(params)} canonical parameters")
+end
+
+# Show detailed list for one type
+Logger.info("\nMikrotik supported canonical parameters:")
+mikrotik_params = ParameterMapping.supported_parameters({:mikrotik, :routeros})
+for param <- mikrotik_params, do: Logger.info("  - #{param}")
+
+:ok
+```
+
+## Applying Quirks to Request/Response Transformations
+
+The Quirks system can transform requests and responses to handle vendor-specific formats.
+
+### Request Transformation
+
+```elixir
+# Create a sample request envelope
+request_envelope = %{
+  header: %{id: "req-001", cwmp_ns: "urn:dslforum-org:cwmp-1-0"},
+  body: %{
+    rpc: "GetParameterValues",
+    parameter_names: [
+      "Device.ManagementServer.URL",
+      "Device.DeviceInfo.Manufacturer"
+    ]
+  }
+}
+
+# Apply request quirks for Mikrotik
+# (Currently Mikrotik doesn't need request transformation, but the mechanism exists)
+transformed = Quirks.apply_request_quirks(request_envelope, "D4CA6D")
+Logger.info("Request after quirks applied: #{inspect(transformed)}")
+
+# For unknown OUIs, envelope passes through unchanged
+passthrough = Quirks.apply_request_quirks(request_envelope, "UNKNOWN")
+Logger.info("Passthrough unchanged: #{request_envelope == passthrough}")
+```
+
+### Response Transformation
+
+```elixir
+# Create a sample response envelope
+response_envelope = %{
+  header: %{id: "resp-001"},
+  body: %{
+    rpc: "GetParameterValuesResponse",
+    parameters: [
+      {"Device.DeviceInfo.Manufacturer", "MikroTik"},
+      {"Device.DeviceInfo.X_MIKROTIK_BoardName", "RB4011"}
+    ]
+  }
+}
+
+# Apply response quirks
+# (Mikrotik responses are standards-compliant, but transformations can normalize vendor extensions)
+transformed_response = Quirks.apply_response_quirks(response_envelope, "D4CA6D")
+Logger.info("Response after quirks: #{inspect(transformed_response)}")
+```
+
+## Real-World Example: Complete Device Handling
+
+Putting it all together: detect a device, look up quirks, and map parameters.
+
+```elixir
+# Simulate receiving an Inform from a Mikrotik device
+incoming_inform = %Inform{
+  device_id: %{
+    oui: "2CC81B",
+    manufacturer: "MikroTik",
+    product_class: "RouterOS",
+    serial_number: "C52C1B123456"
+  },
+  current_time: DateTime.utc_now(),
+  retry_count: 0,
+  event_codes: ["2 PERIODIC"],
+  max_envelopes: 1,
+  parameter_list: [
+    {"Device.DeviceInfo.ModelName", "hAP ac2"},
+    {"Device.DeviceInfo.SoftwareVersion", "7.10"}
+  ]
+}
+
+# Step 1: Detect the device
+device = DeviceDetection.detect(incoming_inform)
+Logger.info("Step 1 - Device detected: #{inspect(device.type)}")
+
+# Step 2: Get quirks module for this device
+oui = device.oui
+quirks_mod = Quirks.get_quirks(oui)
+Logger.info("Step 2 - Quirks module: #{inspect(quirks_mod)}")
+
+# Step 3: Check if we should query certain parameters
+params_to_query = [
+  "Device.DeviceInfo.UpTime",
+  "Device.ManagementServer.PeriodicInformInterval",
+  "Device.WiFi.Radio.1.Channel",
+  "Device.Firewall.Chain.1.Enable"
+]
+
+Logger.info("Step 3 - Parameter support check:")
+queryable = for param <- params_to_query do
+  supported? = Quirks.supported_parameter?(oui, param)
+  notes = Quirks.parameter_notes(oui, param)
+  Logger.info("  #{param}: #{if supported?, do: "query", else: "skip"}")
+  if notes != [], do: Logger.info("    Notes: #{Enum.join(notes, "; ")}")
+  {param, supported?}
+end
+
+# Step 4: Filter to only supported parameters
+supported_params = queryable |> Enum.filter(fn {_, s} -> s end) |> Enum.map(fn {p, _} -> p end)
+Logger.info("Step 4 - Will query: #{inspect(supported_params)}")
+
+# Step 5: Map canonical names if needed
+canonical_request = ["WAN.IPAddress", "Device.UpTime", "Management.URL"]
+Logger.info("Step 5 - Canonical to device paths:")
+for name <- canonical_request do
+  path = ParameterMapping.to_device_path(name, device.type)
+  Logger.info("  #{name} -> #{path}")
+end
+
+%{
+  device: device,
+  quirks_available: quirks_mod != nil,
+  supported_parameters: supported_params
+}
+```
+
+## Summary
+
+This notebook demonstrated:
+
+1. **Device Detection** - Identifying device types (mikrotik, gpon_ont, cable_modem, generic) from Inform data
+2. **OUI-based Lookup** - Using manufacturer OUIs to find vendor-specific quirks
+3. **Quirks Registry** - Central registry mapping OUIs to quirks modules
+4. **Mikrotik Quirks** - Understanding RouterOS TR-069 limitations and supported parameters
+5. **Parameter Mapping** - Translating between canonical names and device-specific paths
+6. **Request/Response Transformation** - Applying vendor-specific transformations
+7. **Real-World Integration** - Complete workflow from detection to parameter handling
+
+The quirks system enables Caretaker to work with diverse CPE devices while handling vendor-specific implementations transparently.

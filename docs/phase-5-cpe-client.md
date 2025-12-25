@@ -1,6 +1,8 @@
 # CPE Client Guide
 
-This guide shows how to use the minimal TR-069 CPE client included in Caretaker to initiate a session with the built-in ACS.
+This guide shows how to use the TR-069 CPE client included in Caretaker to initiate a session with the built-in ACS.
+
+For a comprehensive overview of all simulated CPE features including FirmwareSimulator, DynamicBehavior, Fleet management, and ConnectionRequestServer, see [Simulated CPE Enhancement Plan](simulated_cpe.md).
 
 ## Overview
 
@@ -39,9 +41,9 @@ Supervisor.start_link(children, strategy: :one_for_one)
 # result = %{cwmp_id: ..., cwmp_ns: ..., inform_ack: true, rpc: "GetParameterValues" | nil}
 ```
 
-## Stateful Device Simulation (NEW in Phase 1)
+## Stateful Device Simulation
 
-The CPE client now supports stateful TR-181 parameter storage via `DeviceState`. This allows simulated devices to maintain realistic parameter sets throughout the session.
+The CPE client supports stateful TR-181 parameter storage via `DeviceState`. This allows simulated devices to maintain realistic parameter sets throughout the session.
 
 ### Using DeviceState with Device Profiles
 

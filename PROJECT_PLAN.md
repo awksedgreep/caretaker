@@ -8,14 +8,28 @@ A multi-phase plan to deliver an Elixir TR-069/TR-181 toolkit using Lather (SOAP
   - Caretaker.CWMP.SOAP
 - Caretaker.TR069
   - Caretaker.TR069.Types
-  - Caretaker.TR069.RPC.{Inform, InformResponse, GetParameterNames, GetParameterValues, SetParameterValues, AddObject, DeleteObject, Fault}
+  - Caretaker.TR069.RPC.{Inform, InformResponse, GetParameterNames, GetParameterValues, SetParameterValues, AddObject, DeleteObject, Download, Upload, Reboot, FactoryReset, TransferComplete, AutonomousTransferComplete, ScheduleInform, ScheduleDownload, GetQueuedTransfers, CancelTransfer, RequestDownload, GetRPCMethods, GetParameterAttributes, SetParameterAttributes, Fault}
 - Caretaker.ACS
   - Caretaker.ACS.Server
+  - Caretaker.ACS.Session
+  - Caretaker.ACS.DeviceDetection
+  - Caretaker.ACS.ParameterMapping
   - Caretaker.ACS.Telemetry
 - Caretaker.CPE
-  - Caretaker.CPE.Client (future)
+  - Caretaker.CPE.Client
+  - Caretaker.CPE.DeviceState
+  - Caretaker.CPE.FirmwareSimulator
+  - Caretaker.CPE.DynamicBehavior
+  - Caretaker.CPE.Fleet
+  - Caretaker.CPE.ConnectionRequestServer
+  - Caretaker.CPE.Events.{PON, DOCSIS, Router}
 - Caretaker.TR181
-  - Caretaker.TR181.Model (future)
+  - Caretaker.TR181.Model
+  - Caretaker.TR181.Store
+- Caretaker.PubSub
+- Caretaker.MQTT.Bridge
+- Caretaker.Quirks
+  - Caretaker.Quirks.Mikrotik
 
 ## Telemetry
 - Library prefix: [:caretaker, ...]
@@ -157,15 +171,19 @@ Deliverables
 Acceptance
 - Integration tests pass for Inform round-trip and RPC (GPV) response; telemetry asserted.
 
-## Phase 6 — Docs & Release
+## Phase 6 — Docs & Release (DONE)
 Goals
 - ExDoc guides, examples, README polish
-- Prepare for Hex release v0.1.0
+- Hex release v0.2.0
 
-Status (in progress)
+Status (completed)
 - DONE: Initial CPE client guide stub
-- DONE: Telemetry guide
-- PENDING: README polish; release checklist run-through
+- DONE: Telemetry guide with all events documented
+- DONE: README updated with all features
+- DONE: CHANGELOG updated with version history
+- DONE: Device integration tests (GPON/XGPON, DOCSIS, Mikrotik)
+- DONE: Quirks module for vendor-specific handling
+- DONE: Hex release v0.2.0
 
 Tasks
 - Add docs/phase-5-cpe-client.md with usage and telemetry events
@@ -175,24 +193,14 @@ Tasks
 
 Deliverables
 - Published docs with CPE example and telemetry
+- Published package v0.2.0
 
 Acceptance
 - mix docs builds; README and guides reflect current capabilities
 
-## Phase 6 — Docs & Release
-Goals
-- ExDoc guides, examples, and README polish.
-- Hex release v0.1.0.
-Tasks
-- Guides: ACS setup, Inform round-trip, adding RPCs, telemetry hooks.
-- Changelog, version bump, hex metadata review.
-Deliverables
-- Published package and docs.
-Acceptance
-- mix hex.publish dry-run passes; docs build; README badges.
-
 ## Non-goals (initial)
-- Full TR-069/TR-181 coverage; device-specific quirks; persistent storage; high-availability ACS.
+- Full TR-069/TR-181 coverage; persistent storage; high-availability ACS.
+- Note: Device-specific quirks are now partially supported via Caretaker.Quirks module.
 
 ## Risks & mitigations
 - SOAP/XML edge cases: rely on Lather + fixtures; build strict tests.
@@ -204,10 +212,11 @@ Acceptance
 - Telemetry assertions via :telemetry.attach handlers in tests.
 
 ## Versioning & Milestones
-- v0.1.0: Phases 0–2 (scaffold, Inform/InformResponse, minimal ACS).
-- v0.2.x: Phase 3 (additional RPCs) + part of Phase 4.
-- v0.3.x: Phase 4 completion + Phase 5 (client).
-- v0.4.x: Expanded RPC set (firmware, attributes, scheduling, transfer ops), diagnostics helpers, header compliance tests.
+- v0.1.0: Phases 0–2 (scaffold, Inform/InformResponse, minimal ACS). ✅ Released
+- v0.1.1: Expanded RPC set (firmware, attributes, scheduling, transfer ops). ✅ Released
+- v0.1.2: Diagnostics helpers, header compliance tests. ✅ Released
+- v0.1.3: Phase 3 (additional RPCs) + Phase 4 (TR-181 model). ✅ Released
+- v0.2.0: Phase 5 (CPE client, fleet management), Phase 6 (docs, device integration tests). ✅ Released
 
 ## Release checklist
 - All tests green; dialyzer (optional) clean; formatted.

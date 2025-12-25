@@ -5,12 +5,18 @@ An Elixir TR-069/TR-181 toolkit.
 ## Features
 
 - TR-069 RPC structs and codecs powered by Lather (SOAP 1.1)
-- Minimal ACS server (Plug + Bandit) with spec-driven envelopes and CWMP headers
+- Full-featured ACS server (Plug + Bandit) with spec-driven envelopes and CWMP headers
 - Telemetry-first design `[:caretaker, ...]`
 - Logger-based logging (no IO.puts or IO.inspect)
 - TR-181 model primitives and store mapping
-- Minimal CPE client (Finch): Inform → InformResponse → empty POST, basic RPC handling (GPV)
+- Full-featured CPE client (Finch): Inform session loop, RPC handling (GPV, SPV, Download, Reboot, etc.)
 - Diagnostics helpers (build SPV bodies): Ping, TraceRoute, NSLookup
+- MQTT integration: PubSub for internal events, MQTT.Bridge for Inform broadcasting via tortoise311
+- Device simulation: DeviceState for TR-181 parameter storage, device profiles (fiber ONT, cable modem)
+- Fleet management: Load testing with 100+ simulated devices, staggered spawning, aggregate metrics
+- Firmware simulation: FirmwareSimulator for upgrade lifecycle testing (download, apply, reboot)
+- Device quirks: Vendor-specific behavior handling (e.g., MikroTik RouterOS)
+- Connection request server: HTTP endpoint for ACS-initiated connections
 
 ## Installation
 
@@ -19,7 +25,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:caretaker, "~> 0.1"}
+    {:caretaker, "~> 0.2"}
   ]
 end
 ```
@@ -91,9 +97,9 @@ All logging uses Elixir Logger. Configure level in `config/config.exs`. No IO.pu
 - Phase 1: TR-069 core (Inform/InformResponse with Lather), RPC registry, fixtures & tests (done)
 - Phase 2: Minimal ACS (Plug + Bandit), parse Inform and respond; telemetry timing; integration tests (done)
 - Phase 3: Expanded RPCs and fault handling (done)
-- Phase 4: TR-181 model primitives and mapping helpers (done)
-- Phase 5: CPE client session loop, retries/backoff, telemetry (done)
-- Phase 6: Docs, examples, Hex release (in progress)
+- Phase 4: TR-181 model primitives, device simulation, and event generation (done)
+- Phase 5: CPE client, fleet management, ACS device detection (done)
+- Phase 6: Device integration tests, docs, Hex release v0.2.0 (done)
 
 ## Contributing
 

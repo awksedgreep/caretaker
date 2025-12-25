@@ -152,18 +152,14 @@ The Fleet module provides `trigger_connection_request/2` to add a "6 CONNECTION 
 :ok = Fleet.trigger_connection_request(fleet, device_serial)
 Logger.info("Triggered connection request for: #{device_serial}")
 
-# Verify the event was added
+# Verify the event was added by checking device info
 {:ok, device_info} = Fleet.get_device(fleet, device_serial)
-behavior_pid = device_info.behavior
+Logger.info("Device has dynamic behavior: #{device_info.has_dynamic_behavior}")
 
-if behavior_pid do
-  events = DynamicBehavior.pending_events(behavior_pid)
-  Logger.info("Pending events: #{inspect(events)}")
-  events
-else
-  Logger.info("No behavior manager attached")
-  []
-end
+# The connection request event is added to the device's DynamicBehavior
+# Fleet.trigger_connection_request/2 handles this internally
+# To see pending events, you would access the behavior directly during a session
+device_info
 ```
 
 ## Test Error Handling
