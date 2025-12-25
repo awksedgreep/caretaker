@@ -4,7 +4,7 @@ defmodule Caretaker.MixProject do
   def project do
     [
       app: :caretaker,
-      version: "0.2.0",
+      version: "0.2.2",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
