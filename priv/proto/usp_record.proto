@@ -1,0 +1,93 @@
+// USP Record Protocol Buffer Definition
+// Based on TR-369 (USP) Specification from Broadband Forum
+// The Record wraps USP Messages for transport
+
+syntax = "proto3";
+
+package caretaker.proto.usp_record;
+
+// Top-level USP Record - wrapper for transport
+message Record {
+  string version = 1;
+  string to_id = 2;
+  string from_id = 3;
+  PayloadSecurity payload_security = 4;
+  bytes mac_signature = 5;
+  bytes sender_cert = 6;
+
+  oneof record_type {
+    NoSessionContextRecord no_session_context = 7;
+    SessionContextRecord session_context = 8;
+    WebSocketConnectRecord websocket_connect = 9;
+    MQTTConnectRecord mqtt_connect = 10;
+    STOMPConnectRecord stomp_connect = 11;
+    UDSConnectRecord uds_connect = 12;
+    DisconnectRecord disconnect = 13;
+  }
+}
+
+// Security modes for payload
+enum PayloadSecurity {
+  PLAINTEXT = 0;
+  TLS12 = 1;
+  TLS13 = 2;
+}
+
+// Record without session context (standalone messages)
+message NoSessionContextRecord {
+  bytes payload = 1;
+}
+
+// Record with session context (for segmentation/reassembly)
+message SessionContextRecord {
+  uint64 session_id = 1;
+  uint64 sequence_id = 2;
+  uint64 expected_id = 3;
+  uint64 retransmit_id = 4;
+  PayloadSARState payload_sar_state = 5;
+  PayloadSARState payloadrec_sar_state = 6;
+  bytes payload = 7;
+}
+
+// Segmentation and Reassembly state
+enum PayloadSARState {
+  NONE = 0;
+  BEGIN = 1;
+  INPROCESS = 2;
+  COMPLETE = 3;
+}
+
+// WebSocket-specific connect record
+message WebSocketConnectRecord {
+}
+
+// MQTT-specific connect record
+message MQTTConnectRecord {
+  MQTTVersion version = 1;
+  string subscribed_topic = 2;
+}
+
+enum MQTTVersion {
+  V3_1_1 = 0;
+  V5 = 1;
+}
+
+// STOMP-specific connect record
+message STOMPConnectRecord {
+  STOMPVersion version = 1;
+  string subscribed_destination = 2;
+}
+
+enum STOMPVersion {
+  V1_2 = 0;
+}
+
+// Unix Domain Socket connect record
+message UDSConnectRecord {
+}
+
+// Disconnect record
+message DisconnectRecord {
+  uint32 reason_code = 1;
+  string reason = 2;
+}

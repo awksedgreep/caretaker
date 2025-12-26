@@ -40,10 +40,14 @@ defmodule Caretaker.MixProject do
       {:lather, ">= 0.0.0"},
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.5"},
+      {:websock_adapter, "~> 0.5"},
       {:telemetry, "~> 1.2"},
       {:jason, "~> 1.4"},
       {:tortoise311, "~> 0.12"},
       {:finch, "~> 0.20"},
+      {:protobuf, "~> 0.13"},
+      {:mint_web_socket, "~> 1.0"},
+      {:nipper, "~> 0.1.0"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end

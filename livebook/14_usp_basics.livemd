@@ -1,0 +1,267 @@
+# USP Basics: Protocol Buffers and Message Types
+
+## Overview
+
+TR-369 (User Services Platform / USP) is the successor to TR-069 (CWMP). While TR-069 uses SOAP/XML over HTTP, USP uses Protocol Buffers over modern transports like WebSocket and MQTT.
+
+This livebook covers the fundamentals of USP message encoding and decoding.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.USP.{Proto, Record}
+alias Caretaker.Proto.Usp.Msg
+require Logger
+```
+
+## USP Message Structure
+
+USP messages follow this structure:
+
+```
+USP Record (transport wrapper)
+├── version: "1.3"
+├── to_id: endpoint ID of recipient
+├── from_id: endpoint ID of sender
+└── payload: USP Message
+    ├── header
+    │   ├── msg_id: unique identifier
+    │   └── msg_type: GET, SET, etc.
+    └── body: message-specific content
+```
+
+## Building a Get Request
+
+The `Get` message requests parameter values from an agent:
+
+```elixir
+# Build a Get message for device info
+get_msg = Proto.build_get(["Device.DeviceInfo.Manufacturer", "Device.DeviceInfo.ModelName"])
+
+# Extract message details
+msg_id = Proto.message_id(get_msg)
+Logger.info("Get message ID: #{msg_id}")
+
+# Inspect the message structure
+get_msg
+```
+
+## Building a Set Request
+
+The `Set` message updates parameter values:
+
+```elixir
+# Set expects: [{object_path, [{param, value}, ...]}]
+set_msg = Proto.build_set([
+  {"Device.WiFi.Radio.1.", [
+    {"Enable", "true"},
+    {"Channel", "6"}
+  ]},
+  {"Device.WiFi.SSID.1.", [
+    {"SSID", "MyNetwork"},
+    {"Enable", "true"}
+  ]}
+])
+
+Proto.message_id(set_msg)
+```
+
+## Building Add and Delete Requests
+
+Create or remove object instances:
+
+```elixir
+# Add a new WiFi SSID instance
+add_msg = Proto.build_add("Device.WiFi.SSID.", [
+  {"SSID", "GuestNetwork"},
+  {"Enable", "true"}
+])
+
+# Delete an instance
+delete_msg = Proto.build_delete(["Device.WiFi.SSID.2."])
+
+{Proto.message_id(add_msg), Proto.message_id(delete_msg)}
+```
+
+## Building Operate Requests
+
+Execute device operations:
+
+```elixir
+# Reboot the device
+reboot_msg = Proto.build_operate("Device.Reboot()", [])
+
+# Run a diagnostic with parameters
+ping_msg = Proto.build_operate("Device.IP.Diagnostics.IPPing()", [
+  {"Host", "8.8.8.8"},
+  {"NumberOfRepetitions", "4"}
+])
+
+{Proto.message_id(reboot_msg), Proto.message_id(ping_msg)}
+```
+
+## USP Records: Transport Wrapper
+
+USP Messages are wrapped in Records for transport. Records include endpoint IDs:
+
+```elixir
+# Endpoint ID format: <authority>::<instance-id>
+# Agent example: os::ACME-Router-123
+# Controller example: self::acs.example.com
+
+# Wrap a message in a Record
+record = Record.new(get_msg,
+  to_id: "os::ACME-Router-123",
+  from_id: "self::acs.example.com"
+)
+
+Logger.info("Record to: #{record.to_id}")
+Logger.info("Record from: #{record.from_id}")
+record
+```
+
+## Encoding and Decoding Records
+
+Records are serialized using Protocol Buffers:
+
+```elixir
+# Encode the record to binary
+{:ok, encoded} = Record.encode(record)
+
+Logger.info("Encoded size: #{byte_size(encoded)} bytes")
+Logger.info("Encoded (hex): #{Base.encode16(encoded, case: :lower) |> String.slice(0, 100)}...")
+
+# Decode back to a Record
+{:ok, decoded_record} = Record.decode(encoded)
+
+# Extract the message from the record
+{:ok, decoded_msg} = Record.extract_message(decoded_record)
+
+# Verify round-trip
+original_id = Proto.message_id(get_msg)
+decoded_id = Proto.message_id(decoded_msg)
+
+%{
+  ids_match: original_id == decoded_id,
+  to_id: decoded_record.to_id,
+  from_id: decoded_record.from_id
+}
+```
+
+## Notify Messages
+
+Agents send Notify messages to report events and value changes:
+
+```elixir
+# Value change notification
+value_change = Proto.build_notify_value_change(
+  "sub-001",                              # subscription ID
+  "Device.DeviceInfo.SoftwareVersion",    # parameter path
+  "2.0.0"                                 # new value
+)
+
+# Event notification
+boot_event = Proto.build_notify_event(
+  "sub-002",                # subscription ID
+  "Device.",                # object path
+  "Boot!",                  # event name
+  [                         # event parameters
+    {"Cause", "LocalReboot"},
+    {"CommandKey", ""}
+  ]
+)
+
+{Proto.message_id(value_change), Proto.message_id(boot_event)}
+```
+
+## Response Messages
+
+Agents respond to Controller requests:
+
+```elixir
+# GetResp with parameter values
+get_resp = Proto.build_get_resp([
+  {"Device.DeviceInfo.Manufacturer", "ACME Corp"},
+  {"Device.DeviceInfo.ModelName", "Router-X100"},
+  {"Device.DeviceInfo.SoftwareVersion", "1.5.2"}
+])
+
+# SetResp indicating success
+set_resp = Proto.build_set_resp([
+  {"Device.WiFi.Radio.1.", :success},
+  {"Device.WiFi.SSID.1.", :success}
+])
+
+{Proto.message_id(get_resp), Proto.message_id(set_resp)}
+```
+
+## Error Messages
+
+Error responses for failed operations:
+
+```elixir
+error_msg = Proto.build_error(
+  7004,                           # error code
+  "Invalid parameter value"       # error message
+)
+
+Proto.message_id(error_msg)
+```
+
+## Endpoint ID Utilities
+
+Parse and validate endpoint IDs:
+
+```elixir
+# Parse an endpoint ID
+{:ok, parsed} = Record.parse_endpoint_id("os::ACME-Router-123")
+Logger.info("Authority: #{parsed.authority}, Instance: #{parsed.instance_id}")
+
+# Build endpoint IDs
+agent_id = Record.agent_endpoint_id("ACME", "Router-X100", "ABC123")
+controller_id = Record.controller_endpoint_id("acs.example.com")
+
+%{
+  agent: agent_id,
+  controller: controller_id,
+  valid_agent: Record.valid_endpoint_id?(agent_id),
+  valid_controller: Record.valid_endpoint_id?(controller_id)
+}
+```
+
+## Message Type Registry
+
+Map between USP and TR-069 message types:
+
+```elixir
+alias Caretaker.USP.Registry
+
+# Get all request types
+request_types = Registry.request_types()
+Logger.info("Request types: #{inspect(request_types)}")
+
+# Get TR-069 equivalent
+tr069_get = Registry.tr069_equivalent(:get)
+tr069_set = Registry.tr069_equivalent(:set)
+
+%{
+  get_equivalent: tr069_get,
+  set_equivalent: tr069_set
+}
+```
+
+## Summary
+
+USP provides a modern, efficient protocol for device management:
+
+- **Protocol Buffers** - Compact binary encoding
+- **Endpoint IDs** - Clear addressing scheme
+- **Records** - Transport-independent wrapper
+- **Message Types** - Familiar operations (Get, Set, Add, Delete)
+- **Notify** - Event and value change reporting
+
+Next: See `15_usp_agent.livemd` for implementing USP Agents.

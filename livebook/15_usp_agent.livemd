@@ -1,0 +1,228 @@
+# USP Agent: Device-Side Implementation
+
+## Overview
+
+The USP Agent represents a device (like a router or gateway) that responds to Controller requests. This livebook demonstrates creating and using a USP Agent.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:caretaker, path: "."}
+])
+
+alias Caretaker.USP.{Agent, Proto, Record}
+require Logger
+```
+
+## Starting an Agent
+
+An Agent is started with an endpoint ID and optional initial data:
+
+```elixir
+# Start an agent with device data
+{:ok, agent} = Agent.start_link(
+  endpoint_id: "os::ACME-Router-001",
+  initial_data: %{
+    "Device" => %{
+      "DeviceInfo" => %{
+        "Manufacturer" => "ACME Corp",
+        "ModelName" => "Router-X100",
+        "SerialNumber" => "SN-001",
+        "SoftwareVersion" => "1.5.2",
+        "HardwareVersion" => "1.0"
+      },
+      "ManagementServer" => %{
+        "EnableCWMP" => "false",
+        "URL" => ""
+      },
+      "WiFi" => %{
+        "RadioNumberOfEntries" => "2",
+        "SSIDNumberOfEntries" => "4"
+      }
+    }
+  }
+)
+
+# Get the agent's endpoint ID
+endpoint_id = Agent.endpoint_id(agent)
+Logger.info("Agent started: #{endpoint_id}")
+```
+
+## Handling Get Requests
+
+Send a Get request to the agent:
+
+```elixir
+# Build a Get message
+get_msg = Proto.build_get(["Device.DeviceInfo.Manufacturer", "Device.DeviceInfo.ModelName"])
+
+# Agent processes the message and returns a response
+{:ok, response} = Agent.handle_message(agent, get_msg)
+
+# The response is a GetResp message
+Logger.info("Response type: #{inspect(response.body)}")
+response
+```
+
+## Handling Set Requests
+
+Update parameter values:
+
+```elixir
+# Build a Set message
+set_msg = Proto.build_set([
+  {"Device.ManagementServer.", [
+    {"EnableCWMP", "true"},
+    {"URL", "http://acs.example.com/cwmp"}
+  ]}
+])
+
+# Process the Set request
+{:ok, set_response} = Agent.handle_message(agent, set_msg)
+Logger.info("Set completed")
+set_response
+```
+
+## Handling GetSupportedDM Requests
+
+Query the data model:
+
+```elixir
+# Build GetSupportedDM message
+get_dm_msg = Proto.build_get_supported_dm(["Device.DeviceInfo."])
+
+# Process the request
+{:ok, dm_response} = Agent.handle_message(agent, get_dm_msg)
+dm_response
+```
+
+## Handling GetInstances Requests
+
+List object instances:
+
+```elixir
+# Build GetInstances message
+get_instances_msg = Proto.build_get_instances(["Device."])
+
+# Process the request
+{:ok, instances_response} = Agent.handle_message(agent, get_instances_msg)
+instances_response
+```
+
+## Register Message
+
+Agents send Register messages to announce themselves to Controllers:
+
+```elixir
+# Build a Register message for the agent
+register_msg = Agent.build_register_message(agent)
+
+Logger.info("Register message ID: #{Proto.message_id(register_msg)}")
+register_msg
+```
+
+## Agent with Full Message Flow
+
+Simulate a complete request/response cycle:
+
+```elixir
+# Create a new agent with more data
+{:ok, router} = Agent.start_link(
+  endpoint_id: "os::TestRouter-123",
+  initial_data: %{
+    "Device" => %{
+      "DeviceInfo" => %{
+        "Manufacturer" => "TestCorp",
+        "ProductClass" => "Router",
+        "SerialNumber" => "TEST123"
+      },
+      "WiFi" => %{
+        "Radio" => %{
+          "1" => %{
+            "Enable" => "true",
+            "Channel" => "6",
+            "OperatingFrequencyBand" => "2.4GHz"
+          },
+          "2" => %{
+            "Enable" => "true",
+            "Channel" => "36",
+            "OperatingFrequencyBand" => "5GHz"
+          }
+        }
+      }
+    }
+  }
+)
+
+# Simulate Controller sending Get request
+controller_id = "self::controller.example.com"
+agent_id = Agent.endpoint_id(router)
+
+# Build Get message
+get_msg = Proto.build_get(["Device.WiFi.Radio.1.Channel", "Device.WiFi.Radio.2.Channel"])
+
+# Wrap in Record
+request_record = Record.new(get_msg,
+  to_id: agent_id,
+  from_id: controller_id
+)
+
+# Encode for transport
+{:ok, encoded_request} = Record.encode(request_record)
+Logger.info("Request size: #{byte_size(encoded_request)} bytes")
+
+# Agent receives and decodes
+{:ok, received_record} = Record.decode(encoded_request)
+{:ok, received_msg} = Record.extract_message(received_record)
+
+# Agent processes and responds
+{:ok, response_msg} = Agent.handle_message(router, received_msg)
+
+# Wrap response in Record
+response_record = Record.response_for(received_record, response_msg)
+
+# Encode response for transport
+{:ok, encoded_response} = Record.encode(response_record)
+Logger.info("Response size: #{byte_size(encoded_response)} bytes")
+
+# Controller receives response
+{:ok, final_record} = Record.decode(encoded_response)
+{:ok, final_msg} = Record.extract_message(final_record)
+
+%{
+  request_id: Proto.message_id(get_msg),
+  response_id: Proto.message_id(final_msg),
+  from: final_record.from_id,
+  to: final_record.to_id
+}
+```
+
+## Cleanup
+
+```elixir
+# Stop the agents
+GenServer.stop(agent)
+GenServer.stop(router)
+Logger.info("Agents stopped")
+```
+
+## Agent Design Notes
+
+The USP Agent:
+
+1. **Uses DeviceState** - Integrates with existing TR-181 data model storage
+2. **Handles All Message Types** - Get, Set, Add, Delete, Operate, etc.
+3. **Generates Responses** - Builds appropriate response messages
+4. **Supports Register** - Announces itself to Controllers
+
+## Summary
+
+The USP Agent provides device-side protocol handling:
+
+- Start with `Agent.start_link/1`
+- Process messages with `Agent.handle_message/2`
+- Build Register messages with `Agent.build_register_message/1`
+- Integrates with existing TR-181 data model
+
+Next: See `16_usp_controller.livemd` for Controller implementation.
