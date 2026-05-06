@@ -177,22 +177,24 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   @impl true
   def handle_call({:notify, notification}, _from, state) do
     # Build and send Notify message
-    notify_msg = case notification do
-      %{type: :value_change, path: path, value: value, subscription_id: sub_id} ->
-        Proto.build_notify_value_change(sub_id, path, value)
+    notify_msg =
+      case notification do
+        %{type: :value_change, path: path, value: value, subscription_id: sub_id} ->
+          Proto.build_notify_value_change(sub_id, path, value)
 
-      %{type: :event, obj_path: path, event_name: name, params: params, subscription_id: sub_id} ->
-        Proto.build_notify_event(sub_id, path, name, params)
+        %{type: :event, obj_path: path, event_name: name, params: params, subscription_id: sub_id} ->
+          Proto.build_notify_event(sub_id, path, name, params)
 
-      _ ->
-        nil
-    end
+        _ ->
+          nil
+      end
 
-    result = if notify_msg do
-      send_to_controller(notify_msg, state)
-    else
-      {:error, :invalid_notification}
-    end
+    result =
+      if notify_msg do
+        send_to_controller(notify_msg, state)
+      else
+        {:error, :invalid_notification}
+      end
 
     {:reply, result, state}
   end
@@ -235,9 +237,6 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
             # Send response back
             send_response(response, record, state)
 
-          {:ok, nil} ->
-            :ok
-
           {:error, reason} ->
             Logger.warning("Agent failed to handle message: #{inspect(reason)}")
         end
@@ -250,10 +249,11 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   end
 
   defp send_to_controller(msg, state) do
-    record = Record.new(msg,
-      to_id: state.controller_id,
-      from_id: state.agent_id
-    )
+    record =
+      Record.new(msg,
+        to_id: state.controller_id,
+        from_id: state.agent_id
+      )
 
     topic = Topics.controller_request(state.controller_id)
     publish(topic, record, state)

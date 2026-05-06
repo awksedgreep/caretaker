@@ -51,7 +51,10 @@ defmodule Caretaker.TR069.RPC.Inform do
 
     did = inform.device_id
 
-    event_list = Enum.map(inform.events, fn e -> %{"EventStruct" => %{"EventCode" => e, "CommandKey" => ""}} end)
+    event_list =
+      Enum.map(inform.events, fn e ->
+        %{"EventStruct" => %{"EventCode" => e, "CommandKey" => ""}}
+      end)
 
     map = %{
       "cwmp:Inform" => %{
@@ -72,7 +75,11 @@ defmodule Caretaker.TR069.RPC.Inform do
     res = Lather.Xml.Builder.build_fragment(map)
 
     duration = System.monotonic_time() - start
-    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: duration}, %{rpc: :inform})
+
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: duration}, %{
+      rpc: :inform
+    })
+
     res
   end
 
@@ -91,6 +98,7 @@ defmodule Caretaker.TR069.RPC.Inform do
         node = root["cwmp:Inform"] || root["Inform"] || %{}
 
         dev = node["DeviceId"] || %{}
+
         did = %{
           manufacturer: dev["Manufacturer"] || "",
           oui: dev["OUI"] || "",
@@ -105,8 +113,8 @@ defmodule Caretaker.TR069.RPC.Inform do
           end
           |> Enum.reject(&is_nil/1)
 
-        max_env = to_int((node["MaxEnvelopes"] || "1"), 1)
-        retry_count = to_int((node["RetryCount"] || "0"), 0)
+        max_env = to_int(node["MaxEnvelopes"] || "1", 1)
+        retry_count = to_int(node["RetryCount"] || "0", 0)
         current_time = node["CurrentTime"] || ""
 
         result =
@@ -121,13 +129,22 @@ defmodule Caretaker.TR069.RPC.Inform do
            }}
 
         duration = System.monotonic_time() - start
-        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{rpc: :inform})
+
+        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{
+          rpc: :inform
+        })
+
         result
       end
     rescue
       e ->
         duration = System.monotonic_time() - start
-        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{rpc: :inform, error: true})
+
+        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: duration}, %{
+          rpc: :inform,
+          error: true
+        })
+
         {:error, {:decode_failed, e}}
     end
   end
@@ -152,6 +169,5 @@ defmodule Caretaker.TR069.RPC.Inform do
   defp to_iso8601(iso) when is_binary(iso), do: iso
 
   defp to_int(<<>> = _empty, default), do: default
-  defp to_int(nil, default), do: default
   defp to_int(str, _default) when is_binary(str), do: String.to_integer(str)
 end

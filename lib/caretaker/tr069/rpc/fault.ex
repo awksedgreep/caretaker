@@ -12,13 +12,16 @@ defmodule Caretaker.TR069.RPC.Fault do
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
     try do
-      wrapped = "<root xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+      wrapped =
+        "<root xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <>
+          xml <> "</root>"
 
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
 
         # Prefer cwmp:Fault
         cf = root["cwmp:Fault"] || root["Fault"]
+
         {code, string} =
           cond do
             is_map(cf) ->

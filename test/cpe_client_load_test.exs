@@ -2,20 +2,20 @@ defmodule Caretaker.CPE.ClientLoadTest do
   use ExUnit.Case, async: false
 
   @moduletag :load_test
-  @port 4052
-  @url "http://localhost:4052/cwmp"
 
   setup do
+    port = random_port()
+
     # Start dependencies
     _ = start_supervised(Caretaker.PubSub)
     _ = start_supervised(Caretaker.ACS.Session)
     _ = start_supervised({Finch, name: Caretaker.Finch})
-    _ = start_supervised({Bandit, plug: Caretaker.ACS.Server, port: @port})
-    :ok
+    _ = start_supervised({Bandit, plug: Caretaker.ACS.Server, port: port})
+    %{url: "http://localhost:#{port}/cwmp"}
   end
 
   @tag timeout: 120_000
-  test "spawn 100 concurrent clients and measure memory" do
+  test "spawn 100 concurrent clients and measure memory", ctx do
     mem_before = :erlang.memory(:total)
     proc_before = length(Process.list())
 
@@ -24,7 +24,7 @@ defmodule Caretaker.CPE.ClientLoadTest do
       for i <- 1..100 do
         Task.async(fn ->
           {:ok, _result} =
-            Caretaker.CPE.Client.run_session(@url,
+            Caretaker.CPE.Client.run_session(ctx.url,
               device_id: %{
                 manufacturer: "LoadTest",
                 oui: "LOAD01",
@@ -50,7 +50,14 @@ defmodule Caretaker.CPE.ClientLoadTest do
 
     IO.puts("\n=== Load Test Results ===")
     IO.puts("Clients: #{length(results)}")
-    IO.puts("Successful: #{Enum.count(results, fn {:ok, _} -> true; _ -> false end)}")
+
+    IO.puts(
+      "Successful: #{Enum.count(results, fn
+        {:ok, _} -> true
+        _ -> false
+      end)}"
+    )
+
     IO.puts("Memory before: #{Float.round(mem_before / (1024 * 1024), 2)} MB")
     IO.puts("Memory after: #{Float.round(mem_after / (1024 * 1024), 2)} MB")
     IO.puts("Memory delta: #{Float.round(mem_delta_mb, 2)} MB")
@@ -73,7 +80,7 @@ defmodule Caretaker.CPE.ClientLoadTest do
 
   @tag timeout: 300_000
   @tag :skip
-  test "spawn 1000 concurrent clients (stress test)" do
+  test "spawn 1000 concurrent clients (stress test)", ctx do
     mem_before = :erlang.memory(:total)
 
     # Spawn in batches to avoid overwhelming scheduler
@@ -87,7 +94,7 @@ defmodule Caretaker.CPE.ClientLoadTest do
         tasks =
           for i <- batch_start..batch_end do
             Task.async(fn ->
-              Caretaker.CPE.Client.run_session(@url,
+              Caretaker.CPE.Client.run_session(ctx.url,
                 device_id: %{
                   manufacturer: "StressTest",
                   oui: "STRESS",
@@ -106,7 +113,12 @@ defmodule Caretaker.CPE.ClientLoadTest do
 
     mem_after = :erlang.memory(:total)
     mem_delta_mb = (mem_after - mem_before) / (1024 * 1024)
-    success_count = Enum.count(results, fn {:ok, _} -> true; _ -> false end)
+
+    success_count =
+      Enum.count(results, fn
+        {:ok, _} -> true
+        _ -> false
+      end)
 
     IO.puts("\n=== Stress Test Results ===")
     IO.puts("Total clients: #{length(results)}")
@@ -118,5 +130,12 @@ defmodule Caretaker.CPE.ClientLoadTest do
     # At least 95% should succeed
     assert success_count / length(results) >= 0.95,
            "Too many failures: #{length(results) - success_count}/#{length(results)}"
+  end
+
+  defp random_port do
+    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, {_address, port}} = :inet.sockname(socket)
+    :ok = :gen_tcp.close(socket)
+    port
   end
 end

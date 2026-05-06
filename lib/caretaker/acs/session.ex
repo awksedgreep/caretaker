@@ -41,11 +41,50 @@ defmodule Caretaker.ACS.Session do
   @impl true
   def init(state), do: {:ok, state}
 
-  # Public API (IP-aware)
+  # Public API (caller-key aware)
+
+  @spec upsert_for_caller(caller_key(), device_id(), String.t()) :: :ok
+  def upsert_for_caller(caller_key, device_id, cwmp_ns) do
+    GenServer.call(__MODULE__, {:upsert_for_caller, caller_key, device_id, cwmp_ns})
+  end
+
+  @spec upsert_for_caller_with_context(caller_key(), device_id(), String.t(), device_context()) ::
+          :ok
+  def upsert_for_caller_with_context(caller_key, device_id, cwmp_ns, device_context) do
+    GenServer.call(
+      __MODULE__,
+      {:upsert_for_caller_with_context, caller_key, device_id, cwmp_ns, device_context}
+    )
+  end
+
+  @spec queue_for_caller(caller_key(), command()) :: :ok
+  def queue_for_caller(caller_key, cmd) do
+    GenServer.call(__MODULE__, {:enqueue_for_caller, caller_key, cmd})
+  end
+
+  @spec next_for_caller(caller_key()) :: {:ok, command()} | :empty
+  def next_for_caller(caller_key) do
+    GenServer.call(__MODULE__, {:dequeue_for_caller, caller_key})
+  end
+
+  @spec device_key_for_caller(caller_key()) :: device_key | nil
+  def device_key_for_caller(caller_key) do
+    GenServer.call(__MODULE__, {:device_key_for_caller, caller_key})
+  end
+
+  @spec cwmp_ns_for_caller(caller_key()) :: String.t() | nil
+  def cwmp_ns_for_caller(caller_key) do
+    GenServer.call(__MODULE__, {:cwmp_ns_for_caller, caller_key})
+  end
+
+  @spec device_context_for_caller(caller_key()) :: device_context() | nil
+  def device_context_for_caller(caller_key) do
+    GenServer.call(__MODULE__, {:device_context_for_caller, caller_key})
+  end
 
   @spec upsert_from_ip(:inet.ip_address(), device_id(), String.t()) :: :ok
   def upsert_from_ip(ip, device_id, cwmp_ns) do
-    GenServer.call(__MODULE__, {:upsert_from_ip, ip, device_id, cwmp_ns})
+    upsert_for_caller({:ip, ip}, device_id, cwmp_ns)
   end
 
   @spec upsert_from_ip_with_context(
@@ -55,20 +94,17 @@ defmodule Caretaker.ACS.Session do
           device_context()
         ) :: :ok
   def upsert_from_ip_with_context(ip, device_id, cwmp_ns, device_context) do
-    GenServer.call(
-      __MODULE__,
-      {:upsert_from_ip_with_context, ip, device_id, cwmp_ns, device_context}
-    )
+    upsert_for_caller_with_context({:ip, ip}, device_id, cwmp_ns, device_context)
   end
 
   @spec queue_for_ip(:inet.ip_address(), command()) :: :ok
   def queue_for_ip(ip, cmd) do
-    GenServer.cast(__MODULE__, {:enqueue_for_ip, ip, cmd})
+    queue_for_caller({:ip, ip}, cmd)
   end
 
   @spec next_for_ip(:inet.ip_address()) :: {:ok, command()} | :empty
   def next_for_ip(ip) do
-    GenServer.call(__MODULE__, {:dequeue_for_ip, ip})
+    next_for_caller({:ip, ip})
   end
 
   # Back-compat generic API (device_key)
@@ -84,24 +120,24 @@ defmodule Caretaker.ACS.Session do
 
   @spec device_key_for_ip(:inet.ip_address()) :: device_key | nil
   def device_key_for_ip(ip) do
-    GenServer.call(__MODULE__, {:device_key_for_ip, ip})
+    device_key_for_caller({:ip, ip})
   end
 
   @spec cwmp_ns_for_ip(:inet.ip_address()) :: String.t() | nil
   def cwmp_ns_for_ip(ip) do
-    GenServer.call(__MODULE__, {:cwmp_ns_for_ip, ip})
+    cwmp_ns_for_caller({:ip, ip})
   end
 
   @spec device_context_for_ip(:inet.ip_address()) :: device_context() | nil
   def device_context_for_ip(ip) do
-    GenServer.call(__MODULE__, {:device_context_for_ip, ip})
+    device_context_for_caller({:ip, ip})
   end
 
   # Server callbacks
 
   @impl true
   def handle_call(
-        {:upsert_from_ip, ip, device_id, cwmp_ns},
+        {:upsert_for_caller, caller_key, device_id, cwmp_ns},
         _from,
         %{sessions: sessions, bindings: bindings} = state
       ) do
@@ -121,13 +157,13 @@ defmodule Caretaker.ACS.Session do
      %{
        state
        | sessions: Map.put(sessions, dev_key, sess),
-         bindings: Map.put(bindings, {:ip, ip}, dev_key)
+         bindings: Map.put(bindings, caller_key, dev_key)
      }}
   end
 
   @impl true
   def handle_call(
-        {:upsert_from_ip_with_context, ip, device_id, cwmp_ns, device_context},
+        {:upsert_for_caller_with_context, caller_key, device_id, cwmp_ns, device_context},
         _from,
         %{sessions: sessions, bindings: bindings} = state
       ) do
@@ -147,13 +183,41 @@ defmodule Caretaker.ACS.Session do
      %{
        state
        | sessions: Map.put(sessions, dev_key, sess),
-         bindings: Map.put(bindings, {:ip, ip}, dev_key)
+         bindings: Map.put(bindings, caller_key, dev_key)
      }}
   end
 
   @impl true
-  def handle_call({:dequeue_for_ip, ip}, _from, %{sessions: sessions, bindings: bindings} = state) do
-    case Map.get(bindings, {:ip, ip}) do
+  def handle_call(
+        {:enqueue_for_caller, caller_key, cmd},
+        _from,
+        %{sessions: sessions, bindings: bindings} = state
+      ) do
+    case Map.get(bindings, caller_key) do
+      nil ->
+        {:reply, :ok, state}
+
+      dev_key ->
+        sess =
+          Map.get(sessions, dev_key, %{
+            queue: :queue.new(),
+            device_id: nil,
+            cwmp_ns: nil,
+            device_context: nil
+          })
+
+        q = :queue.in(cmd, sess.queue)
+        {:reply, :ok, %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q})}}
+    end
+  end
+
+  @impl true
+  def handle_call(
+        {:dequeue_for_caller, caller_key},
+        _from,
+        %{sessions: sessions, bindings: bindings} = state
+      ) do
+    case Map.get(bindings, caller_key) do
       nil ->
         {:reply, :empty, state}
 
@@ -194,13 +258,17 @@ defmodule Caretaker.ACS.Session do
   end
 
   @impl true
-  def handle_call({:device_key_for_ip, ip}, _from, %{bindings: bindings} = state) do
-    {:reply, Map.get(bindings, {:ip, ip}), state}
+  def handle_call({:device_key_for_caller, caller_key}, _from, %{bindings: bindings} = state) do
+    {:reply, Map.get(bindings, caller_key), state}
   end
 
   @impl true
-  def handle_call({:cwmp_ns_for_ip, ip}, _from, %{bindings: bindings, sessions: sessions} = state) do
-    case Map.get(bindings, {:ip, ip}) do
+  def handle_call(
+        {:cwmp_ns_for_caller, caller_key},
+        _from,
+        %{bindings: bindings, sessions: sessions} = state
+      ) do
+    case Map.get(bindings, caller_key) do
       nil ->
         {:reply, nil, state}
 
@@ -214,11 +282,11 @@ defmodule Caretaker.ACS.Session do
 
   @impl true
   def handle_call(
-        {:device_context_for_ip, ip},
+        {:device_context_for_caller, caller_key},
         _from,
         %{bindings: bindings, sessions: sessions} = state
       ) do
-    case Map.get(bindings, {:ip, ip}) do
+    case Map.get(bindings, caller_key) do
       nil ->
         {:reply, nil, state}
 
@@ -227,26 +295,6 @@ defmodule Caretaker.ACS.Session do
           %{device_context: ctx} -> {:reply, ctx, state}
           _ -> {:reply, nil, state}
         end
-    end
-  end
-
-  @impl true
-  def handle_cast({:enqueue_for_ip, ip, cmd}, %{sessions: sessions, bindings: bindings} = state) do
-    case Map.get(bindings, {:ip, ip}) do
-      nil ->
-        {:noreply, state}
-
-      dev_key ->
-        sess =
-          Map.get(sessions, dev_key, %{
-            queue: :queue.new(),
-            device_id: nil,
-            cwmp_ns: nil,
-            device_context: nil
-          })
-
-        q = :queue.in(cmd, sess.queue)
-        {:noreply, %{state | sessions: Map.put(sessions, dev_key, %{sess | queue: q})}}
     end
   end
 

@@ -15,21 +15,30 @@ defmodule Caretaker.TR069.RebootFactoryResetTest do
   test "RebootResponse encode/decode" do
     {:ok, body} = RebootResponse.encode(%RebootResponse{})
     {:ok, env} = SOAP.encode_envelope(body, %{id: "RR"})
-    {:ok, %{body: %{rpc: "RebootResponse", xml: xml}}} = SOAP.decode_envelope(IO.iodata_to_binary(env))
+
+    {:ok, %{body: %{rpc: "RebootResponse", xml: xml}}} =
+      SOAP.decode_envelope(IO.iodata_to_binary(env))
+
     assert {:ok, %RebootResponse{}} = RebootResponse.decode(xml)
   end
 
   test "FactoryReset encode/decode" do
     {:ok, body} = FactoryReset.encode(%FactoryReset{})
     {:ok, env} = SOAP.encode_envelope(body, %{id: "F1"})
-    {:ok, %{body: %{rpc: "FactoryReset", xml: xml}}} = SOAP.decode_envelope(IO.iodata_to_binary(env))
+
+    {:ok, %{body: %{rpc: "FactoryReset", xml: xml}}} =
+      SOAP.decode_envelope(IO.iodata_to_binary(env))
+
     assert {:ok, %FactoryReset{}} = FactoryReset.decode(xml)
   end
 
   test "FactoryResetResponse encode/decode" do
     {:ok, body} = FactoryResetResponse.encode(%FactoryResetResponse{})
     {:ok, env} = SOAP.encode_envelope(body, %{id: "FR"})
-    {:ok, %{body: %{rpc: "FactoryResetResponse", xml: xml}}} = SOAP.decode_envelope(IO.iodata_to_binary(env))
+
+    {:ok, %{body: %{rpc: "FactoryResetResponse", xml: xml}}} =
+      SOAP.decode_envelope(IO.iodata_to_binary(env))
+
     assert {:ok, %FactoryResetResponse{}} = FactoryResetResponse.decode(xml)
   end
 end

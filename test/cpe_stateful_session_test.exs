@@ -3,19 +3,16 @@ defmodule Caretaker.CPE.StatefulSessionTest do
 
   alias Caretaker.CPE.{Client, DeviceState}
 
-  require Logger
-
-  @port 4052
-  @acs_url "http://localhost:4052/cwmp"
-
   setup do
+    port = random_port()
+
     # Start dependencies
     _ = start_supervised(Caretaker.PubSub)
     _ = start_supervised(Caretaker.ACS.Session)
     _ = start_supervised({Finch, name: Caretaker.Finch})
 
     # Start the ACS server using the regular ACS.Server
-    {:ok, _} = start_supervised({Bandit, plug: Caretaker.ACS.Server, port: @port})
+    {:ok, _} = start_supervised({Bandit, plug: Caretaker.ACS.Server, port: port})
 
     # Create device state with default device_id
     device_id = %{
@@ -34,7 +31,7 @@ defmodule Caretaker.CPE.StatefulSessionTest do
       if Process.alive?(device_state), do: Agent.stop(device_state)
     end)
 
-    %{device_state: device_state}
+    %{device_state: device_state, acs_url: "http://localhost:#{port}/cwmp"}
   end
 
   test "CPE client with DeviceState responds to GetParameterValues", ctx do
@@ -56,13 +53,16 @@ defmodule Caretaker.CPE.StatefulSessionTest do
     # Enqueue GetParameterValues for the device
     Caretaker.ACS.Session.queue_command(
       {"000000", "CaretakerCPE", "000000"},
-      Caretaker.TR069.RPC.GetParameterValues.new(["Device.DeviceInfo.", "Device.ManagementServer."])
+      Caretaker.TR069.RPC.GetParameterValues.new([
+        "Device.DeviceInfo.",
+        "Device.ManagementServer."
+      ])
     )
 
     # Run a session with device_state (no device_id needed when using defaults)
     assert {:ok, _result} =
              Client.run_session(
-               @acs_url,
+               ctx.acs_url,
                device_state: ctx.device_state,
                timeout: 5000
              )
@@ -95,6 +95,15 @@ defmodule Caretaker.CPE.StatefulSessionTest do
 
     # Verify we can update parameters
     :ok = DeviceState.set(ctx.device_state, "Device.DeviceInfo.SoftwareVersion", "test-version")
-    assert DeviceState.get(ctx.device_state, "Device.DeviceInfo.SoftwareVersion") == "test-version"
+
+    assert DeviceState.get(ctx.device_state, "Device.DeviceInfo.SoftwareVersion") ==
+             "test-version"
+  end
+
+  defp random_port do
+    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, {_address, port}} = :inet.sockname(socket)
+    :ok = :gen_tcp.close(socket)
+    port
   end
 end

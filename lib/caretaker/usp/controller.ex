@@ -251,6 +251,7 @@ defmodule Caretaker.USP.Controller do
         if response do
           Telemetry.emit_controller_message_sent(response, %{agent_id: agent_id})
         end
+
         {:reply, {:ok, response}, new_state}
 
       {:error, reason} ->
@@ -268,12 +269,14 @@ defmodule Caretaker.USP.Controller do
 
         case process_agent_message(agent_id, msg, state) do
           {:ok, response, new_state} ->
-            response_record = if response do
-              Telemetry.emit_controller_message_sent(response, %{agent_id: agent_id})
-              Record.response_for(record, response)
-            else
-              nil
-            end
+            response_record =
+              if response do
+                Telemetry.emit_controller_message_sent(response, %{agent_id: agent_id})
+                Record.response_for(record, response)
+              else
+                nil
+              end
+
             {:reply, {:ok, response_record}, new_state}
 
           {:error, reason} ->
@@ -448,7 +451,12 @@ defmodule Caretaker.USP.Controller do
     new_state = register_agent(agent_id, state)
 
     # Build RegisterResp
-    alias Caretaker.Proto.Usp.{RegisterResp, RegisteredPathResult, OperationStatus, OperationSuccess}
+    alias Caretaker.Proto.Usp.{
+      RegisterResp,
+      RegisteredPathResult,
+      OperationStatus,
+      OperationSuccess
+    }
 
     response = %Msg{
       header: %Header{
@@ -456,18 +464,22 @@ defmodule Caretaker.USP.Controller do
         msg_type: :REGISTER_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:register_resp, %RegisterResp{
-            registered_path_results: [
-              %RegisteredPathResult{
-                requested_path: "Device.",
-                oper_status: %OperationStatus{
-                  oper_status: {:oper_success, %OperationSuccess{}}
-                }
-              }
-            ]
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:register_resp,
+                %RegisterResp{
+                  registered_path_results: [
+                    %RegisteredPathResult{
+                      requested_path: "Device.",
+                      oper_status: %OperationStatus{
+                        oper_status: {:oper_success, %OperationSuccess{}}
+                      }
+                    }
+                  ]
+                }}
+           }}
       }
     }
 
@@ -481,7 +493,12 @@ defmodule Caretaker.USP.Controller do
     new_state = unregister_agent(agent_id, state)
 
     # Build DeregisterResp
-    alias Caretaker.Proto.Usp.{DeregisterResp, DeregisteredPathResult, OperationStatus, OperationSuccess}
+    alias Caretaker.Proto.Usp.{
+      DeregisterResp,
+      DeregisteredPathResult,
+      OperationStatus,
+      OperationSuccess
+    }
 
     response = %Msg{
       header: %Header{
@@ -489,18 +506,22 @@ defmodule Caretaker.USP.Controller do
         msg_type: :DEREGISTER_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:deregister_resp, %DeregisterResp{
-            deregistered_path_results: [
-              %DeregisteredPathResult{
-                requested_path: "Device.",
-                oper_status: %OperationStatus{
-                  oper_status: {:oper_success, %OperationSuccess{}}
-                }
-              }
-            ]
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:deregister_resp,
+                %DeregisterResp{
+                  deregistered_path_results: [
+                    %DeregisteredPathResult{
+                      requested_path: "Device.",
+                      oper_status: %OperationStatus{
+                        oper_status: {:oper_success, %OperationSuccess{}}
+                      }
+                    }
+                  ]
+                }}
+           }}
       }
     }
 
@@ -536,11 +557,12 @@ defmodule Caretaker.USP.Controller do
     new_state = update_agent_activity(agent_id, state)
 
     # Send NotifyResp if requested
-    response = if notify.send_resp do
-      Proto.build_notify_resp(notify.subscription_id, msg_id: msg_id)
-    else
-      nil
-    end
+    response =
+      if notify.send_resp do
+        Proto.build_notify_resp(notify.subscription_id, msg_id: msg_id)
+      else
+        nil
+      end
 
     {:ok, response, new_state}
   end
@@ -579,7 +601,9 @@ defmodule Caretaker.USP.Controller do
 
   defp update_agent_activity(agent_id, state) do
     case Map.get(state.agents, agent_id) do
-      nil -> state
+      nil ->
+        state
+
       session ->
         new_session = %{session | last_message_at: DateTime.utc_now()}
         put_in(state.agents[agent_id], new_session)
@@ -597,6 +621,7 @@ defmodule Caretaker.USP.Controller do
           pending_requests: %{},
           command_queue: :queue.in(msg, :queue.new())
         }
+
         put_in(state.agents[agent_id], session)
 
       session ->
@@ -610,10 +635,11 @@ defmodule Caretaker.USP.Controller do
     msg_id = Proto.message_id(msg)
 
     # Ensure agent is registered
-    new_state = case Map.get(state.agents, agent_id) do
-      nil -> register_agent(agent_id, state)
-      _ -> state
-    end
+    new_state =
+      case Map.get(state.agents, agent_id) do
+        nil -> register_agent(agent_id, state)
+        _ -> state
+      end
 
     # Register pending request
     new_pending = Map.put(new_state.agents[agent_id].pending_requests, msg_id, from)

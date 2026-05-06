@@ -39,7 +39,6 @@ defmodule Caretaker.CPE.FirmwareSimulator do
   """
 
   use Agent
-  require Logger
 
   @type state ::
           :idle
@@ -66,7 +65,6 @@ defmodule Caretaker.CPE.FirmwareSimulator do
           fault_code: integer(),
           fault_string: String.t()
         }
-
 
   @default_download_duration 10_000
   @default_reboot_delay 5_000

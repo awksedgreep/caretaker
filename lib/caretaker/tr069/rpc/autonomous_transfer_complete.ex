@@ -3,7 +3,15 @@ defmodule Caretaker.TR069.RPC.AutonomousTransferComplete do
   TR-069 AutonomousTransferComplete (CPE -> ACS).
   """
 
-  @enforce_keys [:command_key, :start_time, :complete_time, :fault_code, :fault_string, :is_download, :file_type]
+  @enforce_keys [
+    :command_key,
+    :start_time,
+    :complete_time,
+    :fault_code,
+    :fault_string,
+    :is_download,
+    :file_type
+  ]
   defstruct [
     :command_key,
     :start_time,
@@ -65,7 +73,10 @@ defmodule Caretaker.TR069.RPC.AutonomousTransferComplete do
 
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
-        node = root["cwmp:AutonomousTransferComplete"] || root["AutonomousTransferComplete"] || %{}
+
+        node =
+          root["cwmp:AutonomousTransferComplete"] || root["AutonomousTransferComplete"] || %{}
+
         f = node["FaultStruct"] || %{}
 
         {:ok,
@@ -73,7 +84,7 @@ defmodule Caretaker.TR069.RPC.AutonomousTransferComplete do
            command_key: node["CommandKey"] || "",
            start_time: node["StartTime"] || "",
            complete_time: node["CompleteTime"] || "",
-           is_download: (node["IsDownload"] in ["1", 1, true]),
+           is_download: node["IsDownload"] in ["1", 1, true],
            file_type: node["FileType"] || "",
            fault_code: to_int(f["FaultCode"], 0),
            fault_string: f["FaultString"] || ""

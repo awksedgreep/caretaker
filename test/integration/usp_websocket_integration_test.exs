@@ -212,7 +212,9 @@ defmodule Caretaker.USP.WebSocket.IntegrationTest do
       {:ok, {:agent, ^agent_id}} = mqtt_topics.parse_endpoint_from_topic(mqtt_agent_topic)
 
       {:ok, {:controller, ^controller_id}} = Paths.parse_endpoint_from_path(ws_controller_path)
-      {:ok, {:controller, ^controller_id}} = mqtt_topics.parse_endpoint_from_topic(mqtt_controller_topic)
+
+      {:ok, {:controller, ^controller_id}} =
+        mqtt_topics.parse_endpoint_from_topic(mqtt_controller_topic)
     end
   end
 end

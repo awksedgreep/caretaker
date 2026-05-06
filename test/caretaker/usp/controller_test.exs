@@ -47,26 +47,31 @@ defmodule Caretaker.USP.ControllerTest do
     end
 
     test "handles ValueChange notification", %{controller: controller, agent_id: agent_id} do
-      notify_msg = Proto.build_notify_value_change(
-        "sub-1",
-        "Device.DeviceInfo.SoftwareVersion",
-        "2.0.0",
-        send_resp: true
-      )
+      notify_msg =
+        Proto.build_notify_value_change(
+          "sub-1",
+          "Device.DeviceInfo.SoftwareVersion",
+          "2.0.0",
+          send_resp: true
+        )
 
       {:ok, response} = Controller.handle_agent_message(controller, agent_id, notify_msg)
 
       assert response.header.msg_type == :NOTIFY_RESP
     end
 
-    test "handles Event notification without response", %{controller: controller, agent_id: agent_id} do
-      notify_msg = Proto.build_notify_event(
-        "sub-2",
-        "Device.",
-        "Boot!",
-        %{},
-        send_resp: false
-      )
+    test "handles Event notification without response", %{
+      controller: controller,
+      agent_id: agent_id
+    } do
+      notify_msg =
+        Proto.build_notify_event(
+          "sub-2",
+          "Device.",
+          "Boot!",
+          %{},
+          send_resp: false
+        )
 
       {:ok, response} = Controller.handle_agent_message(controller, agent_id, notify_msg)
 
@@ -84,10 +89,11 @@ defmodule Caretaker.USP.ControllerTest do
       register_msg = Proto.build_register(["Device."])
       agent_id = "os::ACME-Router-12345"
 
-      record = Record.new(register_msg,
-        to_id: "self::controller",
-        from_id: agent_id
-      )
+      record =
+        Record.new(register_msg,
+          to_id: "self::controller",
+          from_id: agent_id
+        )
 
       {:ok, response_record} = Controller.handle_agent_record(controller, record)
 
@@ -121,7 +127,10 @@ defmodule Caretaker.USP.ControllerTest do
       assert msg.header.msg_type == :GET
     end
 
-    test "next_command returns empty when queue is empty", %{controller: controller, agent_id: agent_id} do
+    test "next_command returns empty when queue is empty", %{
+      controller: controller,
+      agent_id: agent_id
+    } do
       # Register agent first
       register_msg = Proto.build_register(["Device."])
       {:ok, _} = Controller.handle_agent_message(controller, agent_id, register_msg)
@@ -158,14 +167,15 @@ defmodule Caretaker.USP.ControllerTest do
       {:ok, controller} = Controller.start_link(endpoint_id: "self::controller")
 
       # Start agent
-      {:ok, agent} = Agent.start_link(
-        endpoint_id: "os::ACME-Router-12345",
-        initial_params: %{
-          "Device" => %{
-            "DeviceInfo" => %{"Manufacturer" => "TestCorp"}
+      {:ok, agent} =
+        Agent.start_link(
+          endpoint_id: "os::ACME-Router-12345",
+          initial_params: %{
+            "Device" => %{
+              "DeviceInfo" => %{"Manufacturer" => "TestCorp"}
+            }
           }
-        }
-      )
+        )
 
       agent_id = Agent.endpoint_id(agent)
 
@@ -175,7 +185,8 @@ defmodule Caretaker.USP.ControllerTest do
       assert register_resp.header.msg_type == :REGISTER_RESP
 
       # Controller queues a Get request
-      {:ok, _msg_id} = Controller.queue_get(controller, agent_id, ["Device.DeviceInfo.Manufacturer"])
+      {:ok, _msg_id} =
+        Controller.queue_get(controller, agent_id, ["Device.DeviceInfo.Manufacturer"])
 
       # Agent retrieves and processes the queued command
       {:ok, get_msg} = Controller.next_command(controller, agent_id)

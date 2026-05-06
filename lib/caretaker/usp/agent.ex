@@ -84,7 +84,8 @@ defmodule Caretaker.USP.Agent do
   @doc """
   Handles an incoming USP Record and returns a response Record.
   """
-  @spec handle_record(GenServer.server(), Record.t()) :: {:ok, Record.t()} | {:error, term()}
+  @spec handle_record(GenServer.server(), Record.t()) ::
+          {:ok, Record.t() | nil} | {:error, term()}
   def handle_record(agent, record) do
     GenServer.call(agent, {:handle_record, record})
   end
@@ -216,7 +217,7 @@ defmodule Caretaker.USP.Agent do
   @impl true
   def handle_call(:get_device_state, _from, state) do
     params = DeviceState.get_tree(state.device_state, "Device.")
-    {:reply, params || %{}, state}
+    {:reply, params, state}
   end
 
   @impl true
@@ -314,58 +315,60 @@ defmodule Caretaker.USP.Agent do
   # ============================================================================
 
   defp handle_get(get, msg_id, state) do
-    results = Enum.map(get.param_paths, fn path ->
-      case get_parameters_for_path(path, state) do
-        {:ok, params} ->
-          {path, [{path, params}]}
+    results =
+      Enum.map(get.param_paths, fn path ->
+        case get_parameters_for_path(path, state) do
+          {:ok, params} ->
+            {path, [{path, params}]}
 
-        {:error, _reason} ->
-          {path, []}
-      end
-    end)
+          {:error, _reason} ->
+            {path, []}
+        end
+      end)
 
     response = Proto.build_get_resp(results, msg_id: msg_id)
     {:ok, response, state}
   end
 
   defp handle_set(set, msg_id, state) do
-    results = Enum.flat_map(set.update_objs, fn update_obj ->
-      Enum.map(update_obj.param_settings, fn setting ->
-        full_path = update_obj.obj_path <> setting.param
-        case DeviceState.set(state.device_state, full_path, setting.value) do
-          :ok -> {full_path, :success}
-          {:error, reason} -> {full_path, {:error, 7004, "Failed to set: #{inspect(reason)}"}}
-        end
+    results =
+      Enum.flat_map(set.update_objs, fn update_obj ->
+        Enum.map(update_obj.param_settings, fn setting ->
+          full_path = update_obj.obj_path <> setting.param
+          :ok = DeviceState.set(state.device_state, full_path, setting.value)
+          {full_path, :success}
+        end)
       end)
-    end)
 
     response = Proto.build_set_resp(results, msg_id: msg_id)
     {:ok, response, state}
   end
 
   defp handle_add(add, msg_id, state) do
-    results = Enum.map(add.create_objs, fn create_obj ->
-      # For now, simulate creating an instance
-      instance_num = :rand.uniform(1000)
-      instance_path = create_obj.obj_path <> "#{instance_num}."
+    results =
+      Enum.map(add.create_objs, fn create_obj ->
+        # For now, simulate creating an instance
+        instance_num = :rand.uniform(1000)
+        instance_path = create_obj.obj_path <> "#{instance_num}."
 
-      # Set initial parameters
-      Enum.each(create_obj.param_settings, fn setting ->
-        DeviceState.set(state.device_state, instance_path <> setting.param, setting.value)
+        # Set initial parameters
+        Enum.each(create_obj.param_settings, fn setting ->
+          DeviceState.set(state.device_state, instance_path <> setting.param, setting.value)
+        end)
+
+        {create_obj.obj_path, {:ok, instance_path}}
       end)
-
-      {create_obj.obj_path, {:ok, instance_path}}
-    end)
 
     response = Proto.build_add_resp(results, msg_id: msg_id)
     {:ok, response, state}
   end
 
   defp handle_delete(delete, msg_id, state) do
-    results = Enum.map(delete.obj_paths, fn path ->
-      # For now, simulate successful deletion
-      {path, :success}
-    end)
+    results =
+      Enum.map(delete.obj_paths, fn path ->
+        # For now, simulate successful deletion
+        {path, :success}
+      end)
 
     response = Proto.build_delete_resp(results, msg_id: msg_id)
     {:ok, response, state}
@@ -381,14 +384,20 @@ defmodule Caretaker.USP.Agent do
         msg_type: :OPERATE_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:operate_resp, %OperateResp{
-            operation_results: operate.command,
-            operation_resp: {:req_output_args, %OutputArgs{
-              output_args: %{"Status" => "Success"}
-            }}
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:operate_resp,
+                %OperateResp{
+                  operation_results: operate.command,
+                  operation_resp:
+                    {:req_output_args,
+                     %OutputArgs{
+                       output_args: %{"Status" => "Success"}
+                     }}
+                }}
+           }}
       }
     }
 
@@ -405,19 +414,23 @@ defmodule Caretaker.USP.Agent do
         msg_type: :GET_SUPPORTED_DM_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:get_supported_dm_resp, %GetSupportedDMResp{
-            req_obj_results: [
-              %RequestedObjectResult{
-                req_obj_path: "Device.",
-                err_code: 0,
-                err_msg: "",
-                data_model_inst_uri: "urn:broadband-forum-org:tr-181-2-16-0",
-                supported_objs: []
-              }
-            ]
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:get_supported_dm_resp,
+                %GetSupportedDMResp{
+                  req_obj_results: [
+                    %RequestedObjectResult{
+                      req_obj_path: "Device.",
+                      err_code: 0,
+                      err_msg: "",
+                      data_model_inst_uri: "urn:broadband-forum-org:tr-181-2-16-0",
+                      supported_objs: []
+                    }
+                  ]
+                }}
+           }}
       }
     }
 
@@ -433,11 +446,15 @@ defmodule Caretaker.USP.Agent do
         msg_type: :GET_INSTANCES_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:get_instances_resp, %GetInstancesResp{
-            req_path_results: []
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:get_instances_resp,
+                %GetInstancesResp{
+                  req_path_results: []
+                }}
+           }}
       }
     }
 
@@ -453,11 +470,15 @@ defmodule Caretaker.USP.Agent do
         msg_type: :GET_SUPPORTED_PROTO_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:get_supported_protocol_resp, %GetSupportedProtocolResp{
-            agent_supported_protocol_versions: "1.0,1.1,1.2,1.3"
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:get_supported_protocol_resp,
+                %GetSupportedProtocolResp{
+                  agent_supported_protocol_versions: "1.0,1.1,1.2,1.3"
+                }}
+           }}
       }
     }
 
@@ -484,14 +505,18 @@ defmodule Caretaker.USP.Agent do
     case String.split(endpoint_id, "::", parts: 2) do
       [_authority, instance] ->
         parts = String.split(instance, "-", parts: 3)
+
         case parts do
           [oui, product_class, serial] ->
             %{oui: oui, product_class: product_class, serial_number: serial}
+
           [oui, serial] ->
             %{oui: oui, product_class: "Generic", serial_number: serial}
+
           [id] ->
             %{oui: "000000", product_class: "USP", serial_number: id}
         end
+
       _ ->
         %{oui: "000000", product_class: "USP", serial_number: endpoint_id}
     end
@@ -501,10 +526,12 @@ defmodule Caretaker.USP.Agent do
     Map.merge(left, right, fn
       _key, left_val, right_val when is_map(left_val) and is_map(right_val) ->
         deep_merge(left_val, right_val)
+
       _key, _left_val, right_val ->
         right_val
     end)
   end
+
   defp deep_merge(_left, right), do: right
 
   defp load_profile(nil), do: %{}
@@ -522,37 +549,31 @@ defmodule Caretaker.USP.Agent do
           {:ok, params} -> params
           _ -> %{}
         end
-      _ -> %{}
+
+      _ ->
+        %{}
     end
   end
 
   defp get_parameters_for_path(path, state) do
-    # First try to get a tree (for paths ending with .)
-    tree_result = DeviceState.get_tree(state.device_state, path)
-
-    case tree_result do
-      nil ->
-        # Try getting a single value
-        case DeviceState.get(state.device_state, path) do
-          nil -> {:error, :not_found}
-          value -> {:ok, %{path => to_string(value)}}
-        end
-
-      tree when is_map(tree) ->
-        {:ok, flatten_tree(tree, path)}
-
-      value ->
-        # get_tree returned a single value (not a map)
-        {:ok, %{path => to_string(value)}}
+    if String.ends_with?(path, ".") do
+      {:ok, flatten_tree(DeviceState.get_tree(state.device_state, path), path)}
+    else
+      case DeviceState.get(state.device_state, path) do
+        nil -> {:error, :not_found}
+        value -> {:ok, %{path => to_string(value)}}
+      end
     end
   end
 
   defp flatten_tree(tree, prefix) when is_map(tree) do
     Enum.reduce(tree, %{}, fn {key, value}, acc ->
       full_key = prefix <> key
+
       case value do
         v when is_map(v) ->
           Map.merge(acc, flatten_tree(v, full_key <> "."))
+
         v ->
           Map.put(acc, full_key, to_string(v))
       end

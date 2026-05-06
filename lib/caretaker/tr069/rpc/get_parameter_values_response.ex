@@ -9,7 +9,10 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
   @spec encode(t()) :: {:ok, iodata()} | {:error, term()}
   def encode(%{parameters: params}) do
     start = System.monotonic_time()
-    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :start], %{}, %{rpc: :get_parameter_values_response})
+
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :start], %{}, %{
+      rpc: :get_parameter_values_response
+    })
 
     # Build as repeated ParameterValueStruct elements under ParameterList
     pvs =
@@ -25,7 +28,12 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
 
     case Lather.Xml.Builder.build_fragment(map) do
       {:ok, _frag} = ok ->
-        :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: System.monotonic_time() - start}, %{rpc: :get_parameter_values_response})
+        :telemetry.execute(
+          [:caretaker, :tr069, :rpc, :encode, :stop],
+          %{duration: System.monotonic_time() - start},
+          %{rpc: :get_parameter_values_response}
+        )
+
         ok
 
       error ->
@@ -36,7 +44,11 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
     start = System.monotonic_time()
-    :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :start], %{}, %{rpc: :get_parameter_values_response})
+
+    :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :start], %{}, %{
+      rpc: :get_parameter_values_response
+    })
+
     try do
       # Ensure xsi/xsd prefixes are tolerated
       wrapped =
@@ -63,7 +75,13 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
           end)
 
         res = {:ok, %{parameters: list}}
-        :telemetry.execute([:caretaker, :tr069, :rpc, :decode, :stop], %{duration: System.monotonic_time() - start}, %{rpc: :get_parameter_values_response})
+
+        :telemetry.execute(
+          [:caretaker, :tr069, :rpc, :decode, :stop],
+          %{duration: System.monotonic_time() - start},
+          %{rpc: :get_parameter_values_response}
+        )
+
         res
       end
     rescue

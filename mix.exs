@@ -4,7 +4,7 @@ defmodule Caretaker.MixProject do
   def project do
     [
       app: :caretaker,
-      version: "0.2.2",
+      version: "0.2.3",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -19,7 +19,7 @@ defmodule Caretaker.MixProject do
           "getting_started.md",
           "testing.md",
           "docs/phase-5-cpe-client.md",
-"docs/telemetry.md",
+          "docs/telemetry.md",
           "docs/release_checklist.md",
           "docs/acs_setup.md",
           "docs/adding_rpc.md"

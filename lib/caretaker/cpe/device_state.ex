@@ -36,7 +36,6 @@ defmodule Caretaker.CPE.DeviceState do
   """
 
   use Agent
-  require Logger
 
   @type device_id :: %{
           required(:oui) => String.t(),
@@ -109,12 +108,16 @@ defmodule Caretaker.CPE.DeviceState do
 
       # Notify dynamic behavior of change if configured
       case state.options[:dynamic_behavior] do
-        nil -> :ok
+        nil ->
+          :ok
+
         pid when is_pid(pid) ->
           if Process.alive?(pid) and old_value != value do
             Caretaker.CPE.DynamicBehavior.record_change(pid, path, old_value, value)
           end
-        _ -> :ok
+
+        _ ->
+          :ok
       end
 
       {:ok, new_state}
@@ -183,7 +186,9 @@ defmodule Caretaker.CPE.DeviceState do
 
       # Notify dynamic behavior of changes
       case state.options[:dynamic_behavior] do
-        nil -> :ok
+        nil ->
+          :ok
+
         pid when is_pid(pid) ->
           if Process.alive?(pid) do
             Enum.each(changes, fn {path, old_val, new_val} ->
@@ -192,7 +197,9 @@ defmodule Caretaker.CPE.DeviceState do
               end
             end)
           end
-        _ -> :ok
+
+        _ ->
+          :ok
       end
 
       {:ok, new_state}
@@ -287,6 +294,7 @@ defmodule Caretaker.CPE.DeviceState do
         param_paths =
           if String.ends_with?(path, ".") do
             tree = get_tree_by_path(state.params, path)
+
             flatten_names(tree, String.trim_trailing(path, "."))
             |> Enum.map(& &1.name)
           else

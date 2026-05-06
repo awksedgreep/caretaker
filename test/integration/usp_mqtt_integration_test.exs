@@ -59,11 +59,12 @@ defmodule Caretaker.USP.MQTT.IntegrationTest do
     end
 
     test "Notify message encodes correctly for MQTT" do
-      notify_msg = Proto.build_notify_value_change(
-        "subscription-1",
-        "Device.DeviceInfo.SoftwareVersion",
-        "2.0.0"
-      )
+      notify_msg =
+        Proto.build_notify_value_change(
+          "subscription-1",
+          "Device.DeviceInfo.SoftwareVersion",
+          "2.0.0"
+        )
 
       record =
         Record.new(notify_msg,
@@ -129,17 +130,21 @@ defmodule Caretaker.USP.MQTT.IntegrationTest do
 
     test "response_topic_for returns correct topic" do
       # When agent receives from controller, response goes to controller
-      response_topic = Topics.response_topic_for(
-        "usp/controller/self::acs/request",
-        "os::device-123"
-      )
+      response_topic =
+        Topics.response_topic_for(
+          "usp/controller/self::acs/request",
+          "os::device-123"
+        )
+
       assert response_topic == "usp/agent/os::device-123/request"
 
       # When controller receives from agent, response goes to agent
-      response_topic = Topics.response_topic_for(
-        "usp/agent/os::device-123/request",
-        "self::acs"
-      )
+      response_topic =
+        Topics.response_topic_for(
+          "usp/agent/os::device-123/request",
+          "self::acs"
+        )
+
       assert response_topic == "usp/controller/self::acs/request"
     end
   end

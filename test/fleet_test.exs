@@ -11,29 +11,32 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "starts with all options" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 5,
-        profiles: [{60, :fiber_ont}, {40, :cable_modem}],
-        connection_delay: 10,
-        oui_prefix: "TEST01",
-        product_class: "TestCPE",
-        behaviors: [value_change_events: true]
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 5,
+          profiles: [{60, :fiber_ont}, {40, :cable_modem}],
+          connection_delay: 10,
+          oui_prefix: "TEST01",
+          product_class: "TestCPE",
+          behaviors: [value_change_events: true]
+        )
 
       stats = Fleet.stats(fleet)
       assert stats.total == 5
-      assert stats.spawned == 0  # Not spawned yet
+      # Not spawned yet
+      assert stats.spawned == 0
     end
   end
 
   describe "spawn_devices/1" do
     test "spawns configured number of devices" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 5,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 5,
+          connection_delay: 0
+        )
 
       {:ok, count} = Fleet.spawn_devices(fleet)
       assert count == 5
@@ -43,12 +46,13 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "spawns devices with different profiles" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 10,
-        profiles: [{50, :fiber_ont}, {50, :cable_modem}],
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 10,
+          profiles: [{50, :fiber_ont}, {50, :cable_modem}],
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -63,11 +67,12 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "generates unique serial numbers" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 10,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 10,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -78,12 +83,13 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "serial numbers use configured prefix" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        oui_prefix: "MYOUI1",
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          oui_prefix: "MYOUI1",
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -92,11 +98,12 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "is idempotent" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, count1} = Fleet.spawn_devices(fleet)
       {:ok, count2} = Fleet.spawn_devices(fleet)
@@ -111,12 +118,13 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "auto_start option" do
     test "spawns devices automatically when auto_start is true" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0,
-        auto_start: true
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0,
+          auto_start: true
+        )
 
       # Give it time to spawn
       Process.sleep(100)
@@ -128,11 +136,12 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "stop_all/1" do
     test "stops all spawned devices" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 5,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 5,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -153,11 +162,12 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "stop_device/2" do
     test "stops a specific device" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -172,11 +182,12 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "returns error for non-existent device" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -187,11 +198,12 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "get_device/2" do
     test "returns device info" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -213,11 +225,12 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "add_device/2" do
     test "adds a new device dynamically" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 2,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 2,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -255,18 +268,20 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "update_param/4" do
     test "updates parameter on a specific device" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 2,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 2,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
       devices = Fleet.list_devices(fleet)
       target_sn = hd(devices).serial_number
 
-      :ok = Fleet.update_param(fleet, target_sn, "Device.DeviceInfo.Description", "Updated via Fleet")
+      :ok =
+        Fleet.update_param(fleet, target_sn, "Device.DeviceInfo.Description", "Updated via Fleet")
 
       # Verify the update by getting device state directly
       {:ok, device_info} = Fleet.get_device(fleet, target_sn)
@@ -282,11 +297,12 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "update_all_params/3" do
     test "updates parameter on all devices" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -300,12 +316,13 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "trigger_inform/3" do
     test "triggers inform with events on a device with behaviors" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 2,
-        connection_delay: 0,
-        behaviors: [value_change_events: true]
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 2,
+          connection_delay: 0,
+          behaviors: [value_change_events: true]
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -319,12 +336,13 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "returns error for device without behaviors" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 2,
-        connection_delay: 0
-        # No behaviors configured
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 2,
+          connection_delay: 0
+          # No behaviors configured
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -338,12 +356,13 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "trigger_all_informs/2" do
     test "triggers inform on all devices with behaviors" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0,
-        behaviors: [value_change_events: true]
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0,
+          behaviors: [value_change_events: true]
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -356,11 +375,12 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "stats/1" do
     test "returns comprehensive statistics" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 5,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 5,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -384,11 +404,12 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "tracks memory usage" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 10,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 10,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -406,25 +427,27 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "list_devices/1" do
     test "returns all devices with sanitized info" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
       devices = Fleet.list_devices(fleet)
 
       assert length(devices) == 3
+
       assert Enum.all?(devices, fn d ->
-        Map.has_key?(d, :serial_number) and
-        Map.has_key?(d, :profile) and
-        Map.has_key?(d, :state) and
-        Map.has_key?(d, :sessions) and
-        Map.has_key?(d, :has_device_state) and
-        Map.has_key?(d, :has_dynamic_behavior)
-      end)
+               Map.has_key?(d, :serial_number) and
+                 Map.has_key?(d, :profile) and
+                 Map.has_key?(d, :state) and
+                 Map.has_key?(d, :sessions) and
+                 Map.has_key?(d, :has_device_state) and
+                 Map.has_key?(d, :has_dynamic_behavior)
+             end)
     end
   end
 
@@ -442,12 +465,14 @@ defmodule Caretaker.CPE.FleetTest do
         nil
       )
 
-      {:ok, _fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 5
-      )
+      {:ok, _fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 5
+        )
 
-      assert_receive {:telemetry, :init, %{count: 5}, %{acs_url: "http://localhost:4000/cwmp"}}, 1_000
+      assert_receive {:telemetry, :init, %{count: 5}, %{acs_url: "http://localhost:4000/cwmp"}},
+                     1_000
 
       :telemetry.detach("test-fleet-init-#{inspect(ref)}")
     end
@@ -465,11 +490,12 @@ defmodule Caretaker.CPE.FleetTest do
         nil
       )
 
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -491,11 +517,12 @@ defmodule Caretaker.CPE.FleetTest do
         nil
       )
 
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 2,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 2,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -518,11 +545,12 @@ defmodule Caretaker.CPE.FleetTest do
         nil
       )
 
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 3,
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 3,
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
       :ok = Fleet.stop_all(fleet)
@@ -535,12 +563,13 @@ defmodule Caretaker.CPE.FleetTest do
 
   describe "profile loading" do
     test "loads fiber_ont profile from file if available" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 1,
-        profiles: [{100, :fiber_ont}],
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 1,
+          profiles: [{100, :fiber_ont}],
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -550,12 +579,13 @@ defmodule Caretaker.CPE.FleetTest do
     end
 
     test "uses default params for unknown profile" do
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 1,
-        profiles: [{100, :unknown_profile}],
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 1,
+          profiles: [{100, :unknown_profile}],
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -573,12 +603,13 @@ defmodule Caretaker.CPE.FleetTest do
         }
       }
 
-      {:ok, fleet} = Fleet.start_link(
-        acs_url: "http://localhost:4000/cwmp",
-        count: 1,
-        profiles: [{100, custom_params}],
-        connection_delay: 0
-      )
+      {:ok, fleet} =
+        Fleet.start_link(
+          acs_url: "http://localhost:4000/cwmp",
+          count: 1,
+          profiles: [{100, custom_params}],
+          connection_delay: 0
+        )
 
       {:ok, _} = Fleet.spawn_devices(fleet)
 

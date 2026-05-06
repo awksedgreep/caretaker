@@ -27,7 +27,10 @@ defmodule Caretaker.TR069.RPC.GetRPCMethodsResponse do
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
     try do
-      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <> xml <> "</root>"
+      wrapped =
+        "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <>
+          xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
         node = root["cwmp:GetRPCMethodsResponse"] || root["GetRPCMethodsResponse"] || %{}

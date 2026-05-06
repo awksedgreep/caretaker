@@ -57,7 +57,7 @@ defmodule Caretaker.TR069.RPC.ScheduleDownload do
         |> Map.put("URL", s.url)
         |> put_opt("Username", s.username)
         |> put_opt("Password", s.password)
-        |> put_opt("FileSize", (s.file_size && Integer.to_string(s.file_size)))
+        |> put_opt("FileSize", s.file_size && Integer.to_string(s.file_size))
         |> put_opt("TargetFileName", s.target_file_name)
         |> Map.put("TimeWindowList", %{"TimeWindowStruct" => tw_structs})
     }
@@ -70,6 +70,7 @@ defmodule Caretaker.TR069.RPC.ScheduleDownload do
   def decode(xml) when is_binary(xml) do
     try do
       wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
         node = root["cwmp:ScheduleDownload"] || root["ScheduleDownload"] || %{}
@@ -81,6 +82,7 @@ defmodule Caretaker.TR069.RPC.ScheduleDownload do
             %{} = m ->
               # Either nested under TimeWindowStruct or directly the struct map
               inner = m["TimeWindowStruct"]
+
               cond do
                 is_list(inner) -> inner
                 is_map(inner) -> [inner]
@@ -95,7 +97,8 @@ defmodule Caretaker.TR069.RPC.ScheduleDownload do
                 _ -> []
               end)
 
-            _ -> []
+            _ ->
+              []
           end
 
         tw = Enum.map(elems, &tw_map/1)
@@ -118,6 +121,7 @@ defmodule Caretaker.TR069.RPC.ScheduleDownload do
   end
 
   defp tw_map(%{"TimeWindowStruct" => m}), do: tw_map(m)
+
   defp tw_map(%{} = m) do
     %{
       start_time: m["StartTime"] || "",

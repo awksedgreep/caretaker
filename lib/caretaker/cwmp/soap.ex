@@ -40,6 +40,7 @@ defmodule Caretaker.CWMP.SOAP do
       end
 
     header_map = %{}
+
     header_map =
       case id do
         nil -> header_map
@@ -62,8 +63,11 @@ defmodule Caretaker.CWMP.SOAP do
 
     header_map =
       case Map.get(headers, :session_timeout) do
-        t when is_integer(t) and t >= 0 -> Map.put(header_map, "cwmp:SessionTimeout", Integer.to_string(t))
-        _ -> header_map
+        t when is_integer(t) and t >= 0 ->
+          Map.put(header_map, "cwmp:SessionTimeout", Integer.to_string(t))
+
+        _ ->
+          header_map
       end
 
     header_xml =
@@ -135,7 +139,9 @@ defmodule Caretaker.CWMP.SOAP do
         # Rebuild RPC fragment using Lather builder to avoid regex fragility
         rpc_xml =
           case rpc_key do
-            nil -> nil
+            nil ->
+              nil
+
             key ->
               node = body[key] || %{}
 
@@ -145,7 +151,11 @@ defmodule Caretaker.CWMP.SOAP do
               end
           end
 
-        {:ok, %{header: %{id: id_val, cwmp_ns: cwmp_ns}, body: %{rpc: op, xml: rpc_xml, node: (rpc_key && (body[rpc_key] || %{})), key: rpc_key}}}
+        {:ok,
+         %{
+           header: %{id: id_val, cwmp_ns: cwmp_ns},
+           body: %{rpc: op, xml: rpc_xml, node: rpc_key && (body[rpc_key] || %{}), key: rpc_key}
+         }}
       end
     rescue
       e -> {:error, {:decode_failed, e}}

@@ -118,7 +118,8 @@ defmodule Caretaker.CPE.Fleet do
   This adds a "6 CONNECTION REQUEST" event and is typically called by the
   ConnectionRequestServer when an ACS sends a connection request.
   """
-  @spec trigger_connection_request(GenServer.server(), String.t()) :: :ok | {:error, :not_found | :no_behavior}
+  @spec trigger_connection_request(GenServer.server(), String.t()) ::
+          :ok | {:error, :not_found | :no_behavior}
   def trigger_connection_request(server, serial_number) do
     GenServer.call(server, {:trigger_connection_request, serial_number})
   end
@@ -371,10 +372,14 @@ defmodule Caretaker.CPE.Fleet do
   def handle_call({:update_all_params, path, value}, _from, state) do
     Enum.each(state.devices, fn {_sn, device} ->
       case device.device_state do
-        nil -> :ok
+        nil ->
+          :ok
+
         pid when is_pid(pid) ->
           if Process.alive?(pid), do: DeviceState.set(pid, path, value)
-        _ -> :ok
+
+        _ ->
+          :ok
       end
     end)
 
@@ -396,7 +401,8 @@ defmodule Caretaker.CPE.Fleet do
       uptime_seconds: DateTime.diff(DateTime.utc_now(), state.started_at, :second),
       memory_before_bytes: state.memory_before,
       memory_after_bytes: memory_after,
-      memory_delta_bytes: if(state.memory_before, do: memory_after - state.memory_before, else: nil),
+      memory_delta_bytes:
+        if(state.memory_before, do: memory_after - state.memory_before, else: nil),
       memory_per_device_bytes:
         if state.memory_before && map_size(state.devices) > 0 do
           div(memory_after - state.memory_before, map_size(state.devices))
@@ -429,7 +435,13 @@ defmodule Caretaker.CPE.Fleet do
 
   @impl true
   def handle_call({:add_device, opts}, _from, state) do
-    serial_number = Keyword.get(opts, :serial_number, generate_serial(state.oui_prefix, map_size(state.devices) + 1))
+    serial_number =
+      Keyword.get(
+        opts,
+        :serial_number,
+        generate_serial(state.oui_prefix, map_size(state.devices) + 1)
+      )
+
     profile = Keyword.get(opts, :profile, :fiber_ont)
 
     if Map.has_key?(state.devices, serial_number) do
@@ -659,7 +671,8 @@ defmodule Caretaker.CPE.Fleet do
       sessions: device.sessions,
       last_inform: device.last_inform,
       has_device_state: device.device_state != nil && Process.alive?(device.device_state),
-      has_dynamic_behavior: device.dynamic_behavior != nil && Process.alive?(device.dynamic_behavior)
+      has_dynamic_behavior:
+        device.dynamic_behavior != nil && Process.alive?(device.dynamic_behavior)
     }
   end
 end

@@ -15,7 +15,10 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{names: names}) do
     start = System.monotonic_time()
-    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :start], %{}, %{rpc: :get_parameter_values})
+
+    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :start], %{}, %{
+      rpc: :get_parameter_values
+    })
 
     pn = %{
       "@xsi:type" => "cwmp:ParameterNames",
@@ -26,7 +29,13 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
     map = %{"cwmp:GetParameterValues" => %{"ParameterNames" => pn}}
 
     res = Lather.Xml.Builder.build_fragment(map)
-    :telemetry.execute([:caretaker, :tr069, :rpc, :encode, :stop], %{duration: System.monotonic_time() - start}, %{rpc: :get_parameter_values})
+
+    :telemetry.execute(
+      [:caretaker, :tr069, :rpc, :encode, :stop],
+      %{duration: System.monotonic_time() - start},
+      %{rpc: :get_parameter_values}
+    )
+
     res
   end
 end

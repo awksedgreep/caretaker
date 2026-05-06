@@ -192,7 +192,13 @@ defmodule Caretaker.USP.Transport.WebSocket.Client do
           %{type: :value_change, path: path, value: value, subscription_id: sub_id} ->
             Proto.build_notify_value_change(sub_id, path, value)
 
-          %{type: :event, obj_path: path, event_name: name, params: params, subscription_id: sub_id} ->
+          %{
+            type: :event,
+            obj_path: path,
+            event_name: name,
+            params: params,
+            subscription_id: sub_id
+          } ->
             Proto.build_notify_event(sub_id, path, name, params)
 
           _ ->
@@ -234,11 +240,13 @@ defmodule Caretaker.USP.Transport.WebSocket.Client do
   # ============================================================================
 
   defp connect_to_controller(state) do
-    scheme = if state.secure, do: :https, else: :http
+    http_scheme = if state.secure, do: :https, else: :http
+    websocket_scheme = if state.secure, do: :wss, else: :ws
     path = Paths.controller_path(state.controller_id)
 
-    with {:ok, conn} <- Mint.HTTP.connect(scheme, state.controller_host, state.controller_port),
-         {:ok, conn, ref} <- Mint.WebSocket.upgrade(scheme, conn, path, []) do
+    with {:ok, conn} <-
+           Mint.HTTP.connect(http_scheme, state.controller_host, state.controller_port),
+         {:ok, conn, ref} <- Mint.WebSocket.upgrade(websocket_scheme, conn, path, []) do
       {:ok, %{state | conn: conn, ref: ref, connected: false}}
     end
   end
@@ -258,7 +266,7 @@ defmodule Caretaker.USP.Transport.WebSocket.Client do
   end
 
   defp handle_response({:headers, ref, headers}, %{ref: ref} = state) do
-    case Mint.WebSocket.new(state.conn, ref, 101, headers) do
+    case complete_websocket_handshake(state.conn, ref, headers) do
       {:ok, conn, websocket} ->
         Logger.debug("WebSocket connection established")
         {:noreply, %{state | conn: conn, websocket: websocket, connected: true}}
@@ -351,9 +359,6 @@ defmodule Caretaker.USP.Transport.WebSocket.Client do
             send_response(response, record, state)
             {:noreply, state}
 
-          {:ok, nil} ->
-            {:noreply, state}
-
           {:error, reason} ->
             Logger.warning("Agent failed to handle message: #{inspect(reason)}")
             {:noreply, state}
@@ -414,6 +419,13 @@ defmodule Caretaker.USP.Transport.WebSocket.Client do
       {:error, _websocket, reason} ->
         {:error, reason}
     end
+  end
+
+  @spec complete_websocket_handshake(Mint.HTTP.t(), reference(), Mint.Types.headers()) ::
+          {:ok, Mint.HTTP.t(), Mint.WebSocket.t()}
+          | {:error, Mint.HTTP.t(), Mint.WebSocket.error()}
+  defp complete_websocket_handshake(conn, ref, headers) do
+    apply(Mint.WebSocket, :new, [conn, ref, 101, headers])
   end
 
   defp close_connection(%{conn: nil} = state), do: state

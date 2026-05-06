@@ -19,16 +19,18 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     end
 
     test "transitions to downloading on start_download" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 100
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 100
+        )
 
-      result = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/firmware_v2.0.0.bin",
-        command_key: "upgrade-123",
-        file_type: "1 Firmware Upgrade Image"
-      })
+      result =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/firmware_v2.0.0.bin",
+          command_key: "upgrade-123",
+          file_type: "1 Firmware Upgrade Image"
+        })
 
       assert result == {:ok, :downloading}
 
@@ -40,34 +42,39 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     end
 
     test "prevents concurrent downloads" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 1000
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 1000
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw.bin",
-        command_key: "key1"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw.bin",
+          command_key: "key1"
+        })
 
-      result = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw2.bin",
-        command_key: "key2"
-      })
+      result =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw2.bin",
+          command_key: "key2"
+        })
 
       assert result == {:error, :already_downloading}
     end
 
     test "transitions to downloaded after download_duration" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 50
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 50
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw.bin",
-        command_key: "key1"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw.bin",
+          command_key: "key1"
+        })
 
       # Wait for download to complete
       Process.sleep(100)
@@ -78,15 +85,17 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     end
 
     test "provides transfer times for TransferComplete" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 50
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 50
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw.bin",
-        command_key: "key1"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw.bin",
+          command_key: "key1"
+        })
 
       Process.sleep(100)
 
@@ -98,17 +107,19 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     end
 
     test "transitions through reboot and updates version" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 20,
-        reboot_delay: 20
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 20,
+          reboot_delay: 20
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/firmware_v2.0.0.bin",
-        command_key: "key1",
-        target_version: "2.0.0"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/firmware_v2.0.0.bin",
+          command_key: "key1",
+          target_version: "2.0.0"
+        })
 
       # Wait for download
       Process.sleep(50)
@@ -127,17 +138,19 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     end
 
     test "reset returns to idle state" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 20,
-        reboot_delay: 20
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 20,
+          reboot_delay: 20
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw.bin",
-        command_key: "key1",
-        target_version: "2.0.0"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw.bin",
+          command_key: "key1",
+          target_version: "2.0.0"
+        })
 
       Process.sleep(50)
       {:ok, _} = FirmwareSimulator.start_reboot(sim)
@@ -162,6 +175,7 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
       test_pid = self()
 
       handler_id = "test-fw-telemetry-#{System.unique_integer()}"
+
       events = [
         [:caretaker, :firmware, :download, :start],
         [:caretaker, :firmware, :download, :complete],
@@ -183,15 +197,17 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     end
 
     test "emits telemetry events during download" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 20
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 20
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw_v2.0.0.bin",
-        command_key: "telemetry-test"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw_v2.0.0.bin",
+          command_key: "telemetry-test"
+        })
 
       assert_receive {:telemetry, [:caretaker, :firmware, :download, :start], _, meta}
       assert meta.command_key == "telemetry-test"
@@ -200,23 +216,27 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
       # Wait for download to complete
       Process.sleep(50)
 
-      assert_receive {:telemetry, [:caretaker, :firmware, :download, :complete], measurements, meta}
+      assert_receive {:telemetry, [:caretaker, :firmware, :download, :complete], measurements,
+                      meta}
+
       assert meta.command_key == "telemetry-test"
       assert is_integer(measurements.duration_ms)
     end
 
     test "emits telemetry events during reboot" do
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 20,
-        reboot_delay: 20
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 20,
+          reboot_delay: 20
+        )
 
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw.bin",
-        command_key: "reboot-test",
-        target_version: "2.0.0"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw.bin",
+          command_key: "reboot-test",
+          target_version: "2.0.0"
+        })
 
       Process.sleep(50)
       {:ok, _} = FirmwareSimulator.start_reboot(sim)
@@ -235,29 +255,32 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
     test "firmware_simulator option stores reference" do
       {:ok, sim} = FirmwareSimulator.start_link(current_version: "1.0.0")
 
-      {:ok, state} = DeviceState.start_link(
-        device_id: %{oui: "A1B2C3", product_class: "Router", serial_number: "FW001"},
-        params: %{},
-        firmware_simulator: sim
-      )
+      {:ok, state} =
+        DeviceState.start_link(
+          device_id: %{oui: "A1B2C3", product_class: "Router", serial_number: "FW001"},
+          params: %{},
+          firmware_simulator: sim
+        )
 
       assert {:ok, ^sim} = DeviceState.get_option(state, :firmware_simulator)
     end
 
     test "firmware_simulator option is nil by default" do
-      {:ok, state} = DeviceState.start_link(
-        device_id: %{oui: "A1B2C3", product_class: "Router", serial_number: "FW002"},
-        params: %{}
-      )
+      {:ok, state} =
+        DeviceState.start_link(
+          device_id: %{oui: "A1B2C3", product_class: "Router", serial_number: "FW002"},
+          params: %{}
+        )
 
       assert :error = DeviceState.get_option(state, :firmware_simulator)
     end
 
     test "set_option updates option values" do
-      {:ok, state} = DeviceState.start_link(
-        device_id: %{oui: "A1B2C3", product_class: "Router", serial_number: "FW003"},
-        params: %{}
-      )
+      {:ok, state} =
+        DeviceState.start_link(
+          device_id: %{oui: "A1B2C3", product_class: "Router", serial_number: "FW003"},
+          params: %{}
+        )
 
       {:ok, sim} = FirmwareSimulator.start_link(current_version: "1.0.0")
       :ok = DeviceState.set_option(state, :firmware_simulator, sim)
@@ -269,7 +292,7 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
   describe "Download RPC handler integration" do
     setup do
       # Use unique port for each test
-      port = 4080 + System.unique_integer([:positive]) |> rem(100)
+      port = (4080 + System.unique_integer([:positive])) |> rem(100)
 
       {:ok, sup_pid} =
         Supervisor.start_link(
@@ -281,7 +304,9 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
       case Process.whereis(Caretaker.Finch) do
         nil ->
           {:ok, _} = Finch.start_link(name: Caretaker.Finch)
-        _ -> :ok
+
+        _ ->
+          :ok
       end
 
       # Start Session GenServer
@@ -307,10 +332,11 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
 
     test "Download RPC returns status 1 for async download", %{acs_url: acs_url} do
       # Create firmware simulator
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 100
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 100
+        )
 
       # Create device state with firmware simulator
       device_id = %{
@@ -320,18 +346,19 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
         serial_number: "DL001"
       }
 
-      {:ok, state} = DeviceState.start_link(
-        device_id: %{oui: "FWDL01", product_class: "Router", serial_number: "DL001"},
-        params: %{
-          "Device" => %{
-            "DeviceInfo" => %{
-              "Manufacturer" => "TestCo",
-              "SerialNumber" => "DL001"
+      {:ok, state} =
+        DeviceState.start_link(
+          device_id: %{oui: "FWDL01", product_class: "Router", serial_number: "DL001"},
+          params: %{
+            "Device" => %{
+              "DeviceInfo" => %{
+                "Manufacturer" => "TestCo",
+                "SerialNumber" => "DL001"
+              }
             }
-          }
-        },
-        firmware_simulator: sim
-      )
+          },
+          firmware_simulator: sim
+        )
 
       # Attach telemetry handler for RPC responses BEFORE session starts
       test_pid = self()
@@ -349,28 +376,35 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
       # Create Download RPC
-      download = Caretaker.TR069.RPC.Download.new(
-        command_key: "upgrade-001",
-        file_type: "1 Firmware Upgrade Image",
-        url: "http://example.com/firmware_v2.0.0.bin",
-        file_size: 1024000,
-        delay_seconds: 0
-      )
+      download =
+        Caretaker.TR069.RPC.Download.new(
+          command_key: "upgrade-001",
+          file_type: "1 Firmware Upgrade Image",
+          url: "http://example.com/firmware_v2.0.0.bin",
+          file_size: 1_024_000,
+          delay_seconds: 0
+        )
+
       {:ok, download_body} = Caretaker.TR069.RPC.Download.encode(download)
 
       # Start session in a task so we can queue Download after GPV is sent
-      session_task = Task.async(fn ->
-        Client.run_session(acs_url,
-          device_id: device_id,
-          device_state: state
-        )
-      end)
+      session_task =
+        Task.async(fn ->
+          Client.run_session(acs_url,
+            device_id: device_id,
+            device_state: state
+          )
+        end)
 
       # Wait for the auto-queued GetParameterValues response
       assert_receive {:rpc_response, "GetParameterValues", _}, 2000
 
       # Now queue the Download RPC (session should still be polling)
-      :ok = Caretaker.ACS.Session.queue_for_ip({127, 0, 0, 1}, download_body)
+      :ok =
+        Caretaker.ACS.Session.queue_command(
+          {device_id.oui, device_id.product_class, device_id.serial_number},
+          download_body
+        )
 
       # Wait for Download response
       assert_receive {:rpc_response, "Download", meta}, 2000
@@ -387,18 +421,21 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
 
     test "Reboot RPC triggers reboot simulation", %{acs_url: acs_url} do
       # Create firmware simulator in applying state
-      {:ok, sim} = FirmwareSimulator.start_link(
-        current_version: "1.0.0",
-        download_duration: 20,
-        reboot_delay: 50
-      )
+      {:ok, sim} =
+        FirmwareSimulator.start_link(
+          current_version: "1.0.0",
+          download_duration: 20,
+          reboot_delay: 50
+        )
 
       # Start a download and wait for it to complete
-      {:ok, :downloading} = FirmwareSimulator.start_download(sim, %{
-        url: "http://example.com/fw.bin",
-        command_key: "reboot-test",
-        target_version: "2.0.0"
-      })
+      {:ok, :downloading} =
+        FirmwareSimulator.start_download(sim, %{
+          url: "http://example.com/fw.bin",
+          command_key: "reboot-test",
+          target_version: "2.0.0"
+        })
+
       Process.sleep(50)
 
       # Create device state with firmware simulator
@@ -409,18 +446,19 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
         serial_number: "RB001"
       }
 
-      {:ok, state} = DeviceState.start_link(
-        device_id: %{oui: "FWRB01", product_class: "Router", serial_number: "RB001"},
-        params: %{
-          "Device" => %{
-            "DeviceInfo" => %{
-              "Manufacturer" => "TestCo",
-              "SerialNumber" => "RB001"
+      {:ok, state} =
+        DeviceState.start_link(
+          device_id: %{oui: "FWRB01", product_class: "Router", serial_number: "RB001"},
+          params: %{
+            "Device" => %{
+              "DeviceInfo" => %{
+                "Manufacturer" => "TestCo",
+                "SerialNumber" => "RB001"
+              }
             }
-          }
-        },
-        firmware_simulator: sim
-      )
+          },
+          firmware_simulator: sim
+        )
 
       # Attach telemetry handler
       test_pid = self()
@@ -442,18 +480,23 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
       {:ok, reboot_body} = Caretaker.TR069.RPC.Reboot.encode(reboot)
 
       # Start session in a task
-      session_task = Task.async(fn ->
-        Client.run_session(acs_url,
-          device_id: device_id,
-          device_state: state
-        )
-      end)
+      session_task =
+        Task.async(fn ->
+          Client.run_session(acs_url,
+            device_id: device_id,
+            device_state: state
+          )
+        end)
 
       # Wait for GPV response first
       assert_receive {:rpc_response, "GetParameterValues", _}, 2000
 
       # Queue Reboot
-      :ok = Caretaker.ACS.Session.queue_for_ip({127, 0, 0, 1}, reboot_body)
+      :ok =
+        Caretaker.ACS.Session.queue_command(
+          {device_id.oui, device_id.product_class, device_id.serial_number},
+          reboot_body
+        )
 
       # Wait for Reboot response
       assert_receive {:rpc_response, "Reboot", meta}, 2000

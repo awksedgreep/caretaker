@@ -33,7 +33,6 @@ defmodule Caretaker.CPE.DynamicBehavior do
   """
 
   use GenServer
-  require Logger
 
   alias Caretaker.CPE.DeviceState
 

@@ -56,11 +56,13 @@ defmodule Caretaker.USP.Record do
     MQTTConnectRecord,
     DisconnectRecord
   }
+
   alias Caretaker.Proto.Usp.Msg
   alias Caretaker.USP.Proto
 
   @type endpoint_id :: String.t()
-  @type record :: Record.t()
+  @type usp_record :: Record.t()
+  @type t :: usp_record()
 
   @default_version "1.3"
 
@@ -161,10 +163,12 @@ defmodule Caretaker.USP.Record do
       to_id: Keyword.get(opts, :to_id, ""),
       from_id: Keyword.get(opts, :from_id, ""),
       payload_security: :PLAINTEXT,
-      record_type: {:mqtt_connect, %MQTTConnectRecord{
-        version: Keyword.get(opts, :mqtt_version, :V5),
-        subscribed_topic: subscribed_topic
-      }}
+      record_type:
+        {:mqtt_connect,
+         %MQTTConnectRecord{
+           version: Keyword.get(opts, :mqtt_version, :V5),
+           subscribed_topic: subscribed_topic
+         }}
     }
   end
 
@@ -178,10 +182,12 @@ defmodule Caretaker.USP.Record do
       to_id: Keyword.get(opts, :to_id, ""),
       from_id: Keyword.get(opts, :from_id, ""),
       payload_security: :PLAINTEXT,
-      record_type: {:disconnect, %DisconnectRecord{
-        reason_code: Keyword.get(opts, :reason_code, 0),
-        reason: Keyword.get(opts, :reason, "")
-      }}
+      record_type:
+        {:disconnect,
+         %DisconnectRecord{
+           reason_code: Keyword.get(opts, :reason_code, 0),
+           reason: Keyword.get(opts, :reason, "")
+         }}
     }
   end
 
@@ -247,6 +253,7 @@ defmodule Caretaker.USP.Record do
       when type in [:websocket_connect, :mqtt_connect, :stomp_connect, :uds_connect] do
     true
   end
+
   def connect?(_), do: false
 
   @doc """
@@ -261,13 +268,15 @@ defmodule Caretaker.USP.Record do
   """
   @spec session_context(Record.t()) :: {:ok, map()} | {:error, :no_session_context}
   def session_context(%Record{record_type: {:session_context, ctx}}) do
-    {:ok, %{
-      session_id: ctx.session_id,
-      sequence_id: ctx.sequence_id,
-      expected_id: ctx.expected_id,
-      retransmit_id: ctx.retransmit_id
-    }}
+    {:ok,
+     %{
+       session_id: ctx.session_id,
+       sequence_id: ctx.sequence_id,
+       expected_id: ctx.expected_id,
+       retransmit_id: ctx.retransmit_id
+     }}
   end
+
   def session_context(_), do: {:error, :no_session_context}
 
   @doc """
@@ -295,20 +304,24 @@ defmodule Caretaker.USP.Record do
     case String.split(id, "::", parts: 2) do
       [authority, instance] when byte_size(authority) > 0 and byte_size(instance) > 0 ->
         true
+
       _ ->
         false
     end
   end
+
   def valid_endpoint_id?(_), do: false
 
   @doc """
   Parses an endpoint ID into authority and instance components.
   """
-  @spec parse_endpoint_id(String.t()) :: {:ok, {String.t(), String.t()}} | {:error, :invalid_format}
+  @spec parse_endpoint_id(String.t()) ::
+          {:ok, {String.t(), String.t()}} | {:error, :invalid_format}
   def parse_endpoint_id(id) when is_binary(id) do
     case String.split(id, "::", parts: 2) do
       [authority, instance] when byte_size(authority) > 0 and byte_size(instance) > 0 ->
         {:ok, {authority, instance}}
+
       _ ->
         {:error, :invalid_format}
     end

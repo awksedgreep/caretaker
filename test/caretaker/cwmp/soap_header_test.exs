@@ -4,7 +4,11 @@ defmodule Caretaker.CWMP.SOAPHeaderTest do
   alias Caretaker.CWMP.SOAP
 
   test "encode_envelope mirrors cwmp ns and includes cwmp:ID with mustUnderstand=1" do
-    {:ok, body} = Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{max_envelopes: 1})
+    {:ok, body} =
+      Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{
+        max_envelopes: 1
+      })
+
     {:ok, xml} = SOAP.encode_envelope(body, %{id: "ABC123", cwmp_ns: "urn:dslforum-org:cwmp-1-2"})
     bin = IO.iodata_to_binary(xml)
 
@@ -13,7 +17,11 @@ defmodule Caretaker.CWMP.SOAPHeaderTest do
   end
 
   test "encode_envelope defaults cwmp ns to 1-0 when not provided" do
-    {:ok, body} = Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{max_envelopes: 1})
+    {:ok, body} =
+      Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{
+        max_envelopes: 1
+      })
+
     {:ok, xml} = SOAP.encode_envelope(body, %{id: "X"})
     bin = IO.iodata_to_binary(xml)
 
@@ -21,7 +29,10 @@ defmodule Caretaker.CWMP.SOAPHeaderTest do
   end
 
   test "encode_envelope includes optional header flags when provided" do
-    {:ok, body} = Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{max_envelopes: 1})
+    {:ok, body} =
+      Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{
+        max_envelopes: 1
+      })
 
     {:ok, xml} =
       SOAP.encode_envelope(body, %{
@@ -39,10 +50,18 @@ defmodule Caretaker.CWMP.SOAPHeaderTest do
   end
 
   test "decode_envelope returns cwmp_ns and id from encoded envelope" do
-    {:ok, body} = Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{max_envelopes: 1})
+    {:ok, body} =
+      Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{
+        max_envelopes: 1
+      })
+
     {:ok, xml} = SOAP.encode_envelope(body, %{id: "ID789", cwmp_ns: "urn:dslforum-org:cwmp-1-3"})
 
-    assert {:ok, %{header: %{id: "ID789", cwmp_ns: "urn:dslforum-org:cwmp-1-3"}, body: %{rpc: "InformResponse"}}} =
+    assert {:ok,
+            %{
+              header: %{id: "ID789", cwmp_ns: "urn:dslforum-org:cwmp-1-3"},
+              body: %{rpc: "InformResponse"}
+            }} =
              SOAP.decode_envelope(IO.iodata_to_binary(xml))
   end
 end

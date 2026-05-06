@@ -9,12 +9,22 @@ defmodule Caretaker.TR069.RPC.ScheduleInform do
   @type t :: %__MODULE__{delay_seconds: non_neg_integer(), command_key: String.t()}
 
   @spec new(keyword()) :: t()
-  def new(opts), do: %__MODULE__{delay_seconds: Keyword.fetch!(opts, :delay_seconds), command_key: Keyword.fetch!(opts, :command_key)}
+  def new(opts),
+    do: %__MODULE__{
+      delay_seconds: Keyword.fetch!(opts, :delay_seconds),
+      command_key: Keyword.fetch!(opts, :command_key)
+    }
 
   @doc "Encode body via Lather"
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{} = s) do
-    map = %{"cwmp:ScheduleInform" => %{"DelaySeconds" => Integer.to_string(s.delay_seconds), "CommandKey" => s.command_key}}
+    map = %{
+      "cwmp:ScheduleInform" => %{
+        "DelaySeconds" => Integer.to_string(s.delay_seconds),
+        "CommandKey" => s.command_key
+      }
+    }
+
     Lather.Xml.Builder.build_fragment(map)
   end
 
@@ -23,10 +33,16 @@ defmodule Caretaker.TR069.RPC.ScheduleInform do
   def decode(xml) when is_binary(xml) do
     try do
       wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
         node = root["cwmp:ScheduleInform"] || root["ScheduleInform"] || %{}
-        {:ok, %__MODULE__{delay_seconds: to_int(node["DelaySeconds"], 0), command_key: node["CommandKey"] || ""}}
+
+        {:ok,
+         %__MODULE__{
+           delay_seconds: to_int(node["DelaySeconds"], 0),
+           command_key: node["CommandKey"] || ""
+         }}
       end
     rescue
       e -> {:error, {:decode_failed, e}}

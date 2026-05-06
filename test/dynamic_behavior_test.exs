@@ -6,10 +6,11 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "start_link/1" do
     test "starts with required device_state" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
       {:ok, behavior} = DynamicBehavior.start_link(device_state: device_state)
       assert is_pid(behavior)
@@ -17,19 +18,21 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "starts with all behavior options" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          periodic_inform: [interval: 60_000, jitter: 5_000],
-          dynamic_params: ["Device.DeviceInfo.UpTime"],
-          value_change_events: true
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            periodic_inform: [interval: 60_000, jitter: 5_000],
+            dynamic_params: ["Device.DeviceInfo.UpTime"],
+            value_change_events: true
+          ]
+        )
 
       status = DynamicBehavior.status(behavior)
       assert status.periodic_inform_enabled == true
@@ -40,17 +43,19 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "periodic inform" do
     test "triggers '2 PERIODIC' event on timer" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          periodic_inform: [interval: 100, jitter: 0]
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            periodic_inform: [interval: 100, jitter: 0]
+          ]
+        )
 
       DynamicBehavior.start(behavior)
 
@@ -62,15 +67,17 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "trigger_periodic_inform adds event immediately" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [periodic_inform: [interval: 60_000]]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [periodic_inform: [interval: 60_000]]
+        )
 
       DynamicBehavior.trigger_periodic_inform(behavior)
 
@@ -79,15 +86,17 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "clear_events removes pending events" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [periodic_inform: [interval: 60_000]]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [periodic_inform: [interval: 60_000]]
+        )
 
       DynamicBehavior.trigger_periodic_inform(behavior)
       assert length(DynamicBehavior.pending_events(behavior)) > 0
@@ -97,18 +106,20 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "jitter varies timing" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
       # Start with high jitter to verify randomization
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          periodic_inform: [interval: 1000, jitter: 1000]
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            periodic_inform: [interval: 1000, jitter: 1000]
+          ]
+        )
 
       status = DynamicBehavior.status(behavior)
       assert status.periodic_inform_enabled == true
@@ -117,17 +128,19 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "dynamic parameters" do
     test "updates UpTime based on elapsed time" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"UpTime" => 0}}}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"UpTime" => 0}}}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          dynamic_params: ["Device.DeviceInfo.UpTime"]
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            dynamic_params: ["Device.DeviceInfo.UpTime"]
+          ]
+        )
 
       DynamicBehavior.start(behavior)
 
@@ -139,17 +152,19 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "update_dynamic_params manually triggers update" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"UpTime" => 0}}}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"UpTime" => 0}}}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          dynamic_params: ["Device.DeviceInfo.UpTime"]
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            dynamic_params: ["Device.DeviceInfo.UpTime"]
+          ]
+        )
 
       # Start behaviors to set started_at
       DynamicBehavior.start(behavior)
@@ -162,33 +177,35 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "updates interface stats when configured" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{
-          "Device" => %{
-            "IP" => %{
-              "Interface" => %{
-                "1" => %{
-                  "Stats" => %{
-                    "BytesSent" => 0,
-                    "BytesReceived" => 0
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{
+            "Device" => %{
+              "IP" => %{
+                "Interface" => %{
+                  "1" => %{
+                    "Stats" => %{
+                      "BytesSent" => 0,
+                      "BytesReceived" => 0
+                    }
                   }
                 }
               }
             }
           }
-        }
-      )
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          dynamic_params: [
-            "Device.IP.Interface.1.Stats.BytesSent",
-            "Device.IP.Interface.1.Stats.BytesReceived"
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            dynamic_params: [
+              "Device.IP.Interface.1.Stats.BytesSent",
+              "Device.IP.Interface.1.Stats.BytesReceived"
+            ]
           ]
-        ]
-      )
+        )
 
       DynamicBehavior.start(behavior)
 
@@ -205,16 +222,18 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "value change events" do
     test "records parameter changes" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
-        dynamic_behavior: nil
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
+          dynamic_behavior: nil
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [value_change_events: true]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [value_change_events: true]
+        )
 
       # Update device_state to use this behavior
       DeviceState.set_option(device_state, :dynamic_behavior, behavior)
@@ -228,16 +247,20 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "does not add duplicate VALUE CHANGE events" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original", "Name" => "Router1"}}},
-        dynamic_behavior: nil
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{
+            "Device" => %{"DeviceInfo" => %{"Description" => "Original", "Name" => "Router1"}}
+          },
+          dynamic_behavior: nil
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [value_change_events: true]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [value_change_events: true]
+        )
 
       DeviceState.set_option(device_state, :dynamic_behavior, behavior)
 
@@ -252,16 +275,18 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "ignores changes when value_change_events is false" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
-        dynamic_behavior: nil
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
+          dynamic_behavior: nil
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [value_change_events: false]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [value_change_events: false]
+        )
 
       DeviceState.set_option(device_state, :dynamic_behavior, behavior)
 
@@ -272,16 +297,18 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "update_parameters also triggers value change events" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
-        dynamic_behavior: nil
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
+          dynamic_behavior: nil
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [value_change_events: true]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [value_change_events: true]
+        )
 
       DeviceState.set_option(device_state, :dynamic_behavior, behavior)
 
@@ -296,36 +323,40 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "add_event/3" do
     test "adds custom events" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
       {:ok, behavior} = DynamicBehavior.start_link(device_state: device_state)
 
       DynamicBehavior.add_event(behavior, "6 CONNECTION REQUEST", "cmd-123")
 
       events = DynamicBehavior.pending_events(behavior)
+
       assert Enum.any?(events, fn e ->
-        e.code == "6 CONNECTION REQUEST" and e.command_key == "cmd-123"
-      end)
+               e.code == "6 CONNECTION REQUEST" and e.command_key == "cmd-123"
+             end)
     end
   end
 
   describe "stop_behaviors/1" do
     test "stops all running behaviors" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          periodic_inform: [interval: 100, jitter: 0],
-          dynamic_params: ["Device.DeviceInfo.UpTime"]
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            periodic_inform: [interval: 100, jitter: 0],
+            dynamic_params: ["Device.DeviceInfo.UpTime"]
+          ]
+        )
 
       DynamicBehavior.start(behavior)
       status1 = DynamicBehavior.status(behavior)
@@ -339,19 +370,21 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "status/1" do
     test "returns comprehensive status" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [
-          periodic_inform: [interval: 60_000],
-          dynamic_params: ["Device.DeviceInfo.UpTime"],
-          value_change_events: true
-        ]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [
+            periodic_inform: [interval: 60_000],
+            dynamic_params: ["Device.DeviceInfo.UpTime"],
+            value_change_events: true
+          ]
+        )
 
       status = DynamicBehavior.status(behavior)
 
@@ -367,15 +400,17 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
 
   describe "telemetry events" do
     test "emits periodic_inform.triggered event" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [periodic_inform: [interval: 60_000]]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [periodic_inform: [interval: 60_000]]
+        )
 
       test_pid = self()
       ref = make_ref()
@@ -397,15 +432,17 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "emits dynamic_params.updated event" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"UpTime" => 0}}}
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"UpTime" => 0}}}
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [dynamic_params: ["Device.DeviceInfo.UpTime"]]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [dynamic_params: ["Device.DeviceInfo.UpTime"]]
+        )
 
       test_pid = self()
       ref = make_ref()
@@ -428,16 +465,18 @@ defmodule Caretaker.CPE.DynamicBehaviorTest do
     end
 
     test "emits param.changed event" do
-      {:ok, device_state} = DeviceState.start_link(
-        device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
-        params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
-        dynamic_behavior: nil
-      )
+      {:ok, device_state} =
+        DeviceState.start_link(
+          device_id: %{oui: "TEST01", product_class: "Router", serial_number: "SN001"},
+          params: %{"Device" => %{"DeviceInfo" => %{"Description" => "Original"}}},
+          dynamic_behavior: nil
+        )
 
-      {:ok, behavior} = DynamicBehavior.start_link(
-        device_state: device_state,
-        behaviors: [value_change_events: true]
-      )
+      {:ok, behavior} =
+        DynamicBehavior.start_link(
+          device_state: device_state,
+          behaviors: [value_change_events: true]
+        )
 
       DeviceState.set_option(device_state, :dynamic_behavior, behavior)
 

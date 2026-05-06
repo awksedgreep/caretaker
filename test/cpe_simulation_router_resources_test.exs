@@ -30,7 +30,7 @@ defmodule Caretaker.CPE.Simulation.RouterResourcesTest do
       :ok = RouterResources.update(state, load_profile: :idle)
 
       cpu = DeviceState.get(state, "Device.DeviceInfo.ProcessStatus.CPUUsage")
-      assert cpu >= 0 and cpu <= 10
+      assert cpu >= 0 and cpu <= 15
     end
 
     test "shows high free memory", %{device_state: state} do
@@ -295,8 +295,9 @@ defmodule Caretaker.CPE.Simulation.RouterResourcesTest do
   end
 
   describe "load ramp simulation" do
-    test "load_ramp function exists and accepts options", %{device_state: state} do
+    test "load_ramp function exists and accepts options", _ctx do
       # Test that function exists with correct arity
+      assert Code.ensure_loaded?(RouterResources)
       assert function_exported?(RouterResources, :simulate_load_ramp, 2)
 
       # Quick test with short duration

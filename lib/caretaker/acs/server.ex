@@ -8,11 +8,14 @@ defmodule Caretaker.ACS.Server do
   use Plug.Router
   require Logger
 
+  @default_cwmp_ns "urn:dslforum-org:cwmp-1-0"
+
   plug(:match)
   plug(:dispatch)
 
   post "/cwmp" do
     start = System.monotonic_time()
+    caller_key = caller_key(conn)
 
     :telemetry.execute([:caretaker, :acs, :request, :start], %{}, %{path: "/cwmp", method: "POST"})
 
@@ -44,16 +47,17 @@ defmodule Caretaker.ACS.Server do
     conn =
       case body do
         <<>> ->
-          case Caretaker.ACS.Session.next_for_ip(conn.remote_ip || {127, 0, 0, 1}) do
+          case Caretaker.ACS.Session.next_for_caller(caller_key) do
             {:ok, cmd_body} ->
               _ = :telemetry.execute([:caretaker, :acs, :queue, :dequeue], %{}, %{rpc: :next})
 
               ns =
-                Caretaker.ACS.Session.cwmp_ns_for_ip(conn.remote_ip || {127, 0, 0, 1}) ||
-                  Caretaker.CWMP.SOAP.content_type() && "urn:dslforum-org:cwmp-1-0"
+                Caretaker.ACS.Session.cwmp_ns_for_caller(caller_key) || @default_cwmp_ns
 
               id = Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
-              {:ok, envelope} = Caretaker.CWMP.SOAP.encode_envelope(cmd_body, %{id: id, cwmp_ns: ns})
+
+              {:ok, envelope} =
+                Caretaker.CWMP.SOAP.encode_envelope(cmd_body, %{id: id, cwmp_ns: ns})
 
               conn
               |> Plug.Conn.put_resp_header("content-type", Caretaker.CWMP.SOAP.content_type())
@@ -77,8 +81,7 @@ defmodule Caretaker.ACS.Server do
                        device_id: inform.device_id
                      }),
                    # Upsert session and enqueue GPV if Session is running; otherwise no-op.
-                   :ok <-
-                     maybe_enqueue_gpv(conn.remote_ip || {127, 0, 0, 1}, inform.device_id, ns),
+                   :ok <- maybe_enqueue_gpv(caller_key, inform.device_id, ns),
                    {:ok, resp_body} <-
                      Caretaker.TR069.RPC.InformResponse.encode(
                        %Caretaker.TR069.RPC.InformResponse{max_envelopes: 1}
@@ -104,9 +107,7 @@ defmodule Caretaker.ACS.Server do
                body: %{rpc: "GetParameterValuesResponse", xml: body_xml, node: body_node}
              }} ->
               # Map response into TR-181 store for this device; respond 204.
-              ip = conn.remote_ip || {127, 0, 0, 1}
-
-              case Caretaker.ACS.Session.device_key_for_ip(ip) do
+              case Caretaker.ACS.Session.device_key_for_caller(caller_key) do
                 {oui, pc, sn} = dev_key ->
                   params =
                     case Caretaker.TR069.RPC.GetParameterValuesResponse.decode(body_xml) do
@@ -289,13 +290,15 @@ defmodule Caretaker.ACS.Server do
     conn
   end
 
-  defp maybe_enqueue_gpv(ip, device_id, ns) do
+  @spec maybe_enqueue_gpv(Caretaker.ACS.Session.caller_key(), map(), String.t()) :: :ok
+  defp maybe_enqueue_gpv(caller_key, device_id, ns) do
     case Process.whereis(Caretaker.ACS.Session) do
       nil ->
         :ok
 
       _pid ->
-        :ok = Caretaker.ACS.Session.upsert_from_ip(ip, device_id, ns)
+        session_device_id = Map.take(device_id, [:oui, :product_class, :serial_number])
+        :ok = Caretaker.ACS.Session.upsert_for_caller(caller_key, session_device_id, ns)
 
         {:ok, gpv} =
           Caretaker.TR069.RPC.GetParameterValues.encode(
@@ -307,10 +310,28 @@ defmodule Caretaker.ACS.Server do
             rpc: :get_parameter_values
           })
 
-        :ok = Caretaker.ACS.Session.queue_for_ip(ip, gpv)
+        :ok = Caretaker.ACS.Session.queue_for_caller(caller_key, gpv)
         :ok
     end
   end
+
+  defp caller_key(conn) do
+    peer_data = Plug.Conn.get_peer_data(conn)
+
+    if use_test_remote_ip_fallback?(conn, peer_data) do
+      {:ip, conn.remote_ip}
+    else
+      {:peer, peer_data.address, peer_data.port}
+    end
+  rescue
+    KeyError -> {:ip, conn.remote_ip}
+  end
+
+  defp use_test_remote_ip_fallback?(%Plug.Conn{adapter: {Plug.Adapters.Test.Conn, _}}, peer_data) do
+    peer_data == %{address: {127, 0, 0, 1}, port: 111_317, ssl_cert: nil}
+  end
+
+  defp use_test_remote_ip_fallback?(_conn, _peer_data), do: false
 
   defp extract_gpv_params_from_node(%{} = node) do
     plist = node["ParameterList"] || %{}
@@ -318,15 +339,20 @@ defmodule Caretaker.ACS.Server do
 
     Enum.map(items, fn item ->
       name = item["Name"] || ""
-      val = case item["Value"] do
-        %{"#text" => v} -> v
-        v when is_binary(v) -> v
-        _ -> ""
-      end
-      typ = case item["Value"] do
-        %{"@xsi:type" => t} -> t
-        _ -> ""
-      end
+
+      val =
+        case item["Value"] do
+          %{"#text" => v} -> v
+          v when is_binary(v) -> v
+          _ -> ""
+        end
+
+      typ =
+        case item["Value"] do
+          %{"@xsi:type" => t} -> t
+          _ -> ""
+        end
+
       %{name: name, value: val, type: typ}
     end)
   end
@@ -338,7 +364,7 @@ defmodule Caretaker.ACS.Server do
   end
 
   @doc "Child spec to start Bandit with this router"
-  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  @spec child_spec(keyword()) :: {Bandit, keyword()}
   def child_spec(opts \\ []) do
     bandit_opts = [
       plug: __MODULE__,

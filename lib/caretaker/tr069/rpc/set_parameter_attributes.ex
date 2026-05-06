@@ -16,7 +16,13 @@ defmodule Caretaker.TR069.RPC.SetParameterAttributes do
   @spec encode(t()) :: {:ok, iodata()} | {:error, term()}
   def encode(%{parameters: list}) do
     items =
-      Enum.map(list, fn %{name: n, notification_change: nc, notification: nof, access_list_change: ac, access_list: al} ->
+      Enum.map(list, fn %{
+                          name: n,
+                          notification_change: nc,
+                          notification: nof,
+                          access_list_change: ac,
+                          access_list: al
+                        } ->
         %{
           "SetParameterAttributesStruct" => %{
             "Name" => n,
@@ -35,7 +41,10 @@ defmodule Caretaker.TR069.RPC.SetParameterAttributes do
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
     try do
-      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <> xml <> "</root>"
+      wrapped =
+        "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <>
+          xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
         node = root["cwmp:SetParameterAttributes"] || root["SetParameterAttributes"] || %{}

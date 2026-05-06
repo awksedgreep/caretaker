@@ -26,10 +26,17 @@ defmodule Caretaker.TR069.RPC.GetParameterAttributesResponse do
   @spec decode(binary()) :: {:ok, t()} | {:error, term()}
   def decode(xml) when is_binary(xml) do
     try do
-      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <> xml <> "</root>"
+      wrapped =
+        "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <>
+          xml <> "</root>"
+
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
-        node = root["cwmp:GetParameterAttributesResponse"] || root["GetParameterAttributesResponse"] || %{}
+
+        node =
+          root["cwmp:GetParameterAttributesResponse"] || root["GetParameterAttributesResponse"] ||
+            %{}
+
         plist = node["ParameterList"] || %{}
         items = plist["ParameterAttributeStruct"] |> List.wrap()
 

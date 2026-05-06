@@ -272,10 +272,11 @@ defmodule Caretaker.USP.Transport.MQTT.Controller do
   defp send_request_and_wait(agent_id, msg, from, state) do
     msg_id = Proto.message_id(msg)
 
-    record = Record.new(msg,
-      to_id: agent_id,
-      from_id: state.controller_id
-    )
+    record =
+      Record.new(msg,
+        to_id: agent_id,
+        from_id: state.controller_id
+      )
 
     topic = Topics.agent_request(agent_id)
 

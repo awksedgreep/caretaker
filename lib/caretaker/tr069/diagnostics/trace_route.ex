@@ -7,7 +7,13 @@ defmodule Caretaker.TR069.Diagnostics.TraceRoute do
   alias Caretaker.TR069.RPC.SetParameterValues
 
   @enforce_keys [:host]
-  defstruct host: nil, timeout: 5000, data_block_size: 56, max_hop_count: 30, dscp: nil, interface: nil, parameter_key: ""
+  defstruct host: nil,
+            timeout: 5000,
+            data_block_size: 56,
+            max_hop_count: 30,
+            dscp: nil,
+            interface: nil,
+            parameter_key: ""
 
   @type t :: %__MODULE__{
           host: String.t(),
@@ -41,8 +47,16 @@ defmodule Caretaker.TR069.Diagnostics.TraceRoute do
       [
         %{name: base <> "Host", value: cfg.host, type: "xsd:string"},
         %{name: base <> "Timeout", value: Integer.to_string(cfg.timeout), type: "xsd:int"},
-        %{name: base <> "DataBlockSize", value: Integer.to_string(cfg.data_block_size), type: "xsd:int"},
-        %{name: base <> "MaxHopCount", value: Integer.to_string(cfg.max_hop_count), type: "xsd:int"},
+        %{
+          name: base <> "DataBlockSize",
+          value: Integer.to_string(cfg.data_block_size),
+          type: "xsd:int"
+        },
+        %{
+          name: base <> "MaxHopCount",
+          value: Integer.to_string(cfg.max_hop_count),
+          type: "xsd:int"
+        },
         %{name: base <> "DiagnosticsState", value: "Requested", type: "xsd:string"}
       ]
       |> maybe_add(cfg.interface, base <> "Interface", "xsd:string")
@@ -53,5 +67,7 @@ defmodule Caretaker.TR069.Diagnostics.TraceRoute do
   end
 
   defp maybe_add(list, nil, _name, _type), do: list
-  defp maybe_add(list, val, name, type), do: list ++ [%{name: name, value: to_string(val), type: type}]
+
+  defp maybe_add(list, val, name, type),
+    do: list ++ [%{name: name, value: to_string(val), type: type}]
 end

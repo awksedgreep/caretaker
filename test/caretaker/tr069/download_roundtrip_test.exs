@@ -30,9 +30,18 @@ defmodule Caretaker.TR069.DownloadRoundtripTest do
   end
 
   test "DownloadResponse encode/decode" do
-    r = DownloadResponse.new(status: 1, start_time: "2020-01-01T00:00:00Z", complete_time: "2020-01-01T00:05:00Z")
+    r =
+      DownloadResponse.new(
+        status: 1,
+        start_time: "2020-01-01T00:00:00Z",
+        complete_time: "2020-01-01T00:05:00Z"
+      )
+
     {:ok, body} = DownloadResponse.encode(r)
-    {:ok, %{body: %{rpc: "DownloadResponse", xml: xml}}} = SOAP.decode_envelope(IO.iodata_to_binary(elem(SOAP.encode_envelope(body, %{id: "Y"}), 1)))
+
+    {:ok, %{body: %{rpc: "DownloadResponse", xml: xml}}} =
+      SOAP.decode_envelope(IO.iodata_to_binary(elem(SOAP.encode_envelope(body, %{id: "Y"}), 1)))
+
     assert {:ok, %DownloadResponse{} = back} = DownloadResponse.decode(xml)
     assert back.status == 1
   end

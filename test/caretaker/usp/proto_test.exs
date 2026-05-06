@@ -32,9 +32,10 @@ defmodule Caretaker.USP.ProtoTest do
 
   describe "build_set/2" do
     test "creates a Set request with updates" do
-      msg = Proto.build_set([
-        {"Device.WiFi.SSID.1.", [SSID: "TestNetwork", Enable: "true"]}
-      ])
+      msg =
+        Proto.build_set([
+          {"Device.WiFi.SSID.1.", [SSID: "TestNetwork", Enable: "true"]}
+        ])
 
       assert msg.header.msg_type == :SET
 
@@ -56,9 +57,10 @@ defmodule Caretaker.USP.ProtoTest do
 
   describe "build_add/2" do
     test "creates an Add request" do
-      msg = Proto.build_add([
-        {"Device.NAT.PortMapping.", [ExternalPort: "8080", InternalPort: "80"]}
-      ])
+      msg =
+        Proto.build_add([
+          {"Device.NAT.PortMapping.", [ExternalPort: "8080", InternalPort: "80"]}
+        ])
 
       assert msg.header.msg_type == :ADD
 
@@ -80,10 +82,11 @@ defmodule Caretaker.USP.ProtoTest do
 
   describe "build_operate/3" do
     test "creates an Operate request" do
-      msg = Proto.build_operate(
-        "Device.IP.Diagnostics.IPPing()",
-        %{Host: "8.8.8.8", NumberOfRepetitions: "4"}
-      )
+      msg =
+        Proto.build_operate(
+          "Device.IP.Diagnostics.IPPing()",
+          %{Host: "8.8.8.8", NumberOfRepetitions: "4"}
+        )
 
       assert msg.header.msg_type == :OPERATE
 
@@ -119,9 +122,13 @@ defmodule Caretaker.USP.ProtoTest do
     end
 
     test "round-trips a Set message" do
-      original = Proto.build_set([
-        {"Device.WiFi.SSID.1.", [SSID: "TestNetwork"]}
-      ], msg_id: "set-test")
+      original =
+        Proto.build_set(
+          [
+            {"Device.WiFi.SSID.1.", [SSID: "TestNetwork"]}
+          ],
+          msg_id: "set-test"
+        )
 
       assert {:ok, binary} = Proto.encode(original)
       assert {:ok, decoded} = Proto.decode(binary)
@@ -135,10 +142,11 @@ defmodule Caretaker.USP.ProtoTest do
     test "wraps and unwraps a message in a record" do
       msg = Proto.build_get(["Device."], msg_id: "record-test")
 
-      record = Proto.wrap_in_record(msg,
-        to_id: "os::agent-123",
-        from_id: "self::controller"
-      )
+      record =
+        Proto.wrap_in_record(msg,
+          to_id: "os::agent-123",
+          from_id: "self::controller"
+        )
 
       assert record.version == "1.3"
       assert record.to_id == "os::agent-123"

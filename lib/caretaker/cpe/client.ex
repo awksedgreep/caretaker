@@ -9,8 +9,6 @@ defmodule Caretaker.CPE.Client do
   This module uses Finch for HTTP. Ensure a Finch supervisor is running:
     {Finch, name: Caretaker.Finch}
   """
-
-  require Logger
   alias Caretaker.CWMP.SOAP
   alias Caretaker.TR069.RPC.Inform
   alias Caretaker.CPE.FirmwareSimulator
@@ -93,7 +91,15 @@ defmodule Caretaker.CPE.Client do
              backoff_base
            ),
          {:ok, %{body: %{rpc: "InformResponse"}}} <- SOAP.decode_envelope(ack_xml) do
-      case session_loop(acs_url, cwmp_ns, device_id, device_state, timeout, max_retries, backoff_base) do
+      case session_loop(
+             acs_url,
+             cwmp_ns,
+             device_id,
+             device_state,
+             timeout,
+             max_retries,
+             backoff_base
+           ) do
         {:ok, last_rpc} ->
           :telemetry.execute([:caretaker, :cpe_client, :session, :stop], %{}, %{
             acs_url: acs_url,
@@ -126,7 +132,16 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retries, backoff_base, last_rpc \\ nil) do
+  defp session_loop(
+         acs_url,
+         prev_ns,
+         device_id,
+         device_state,
+         timeout,
+         max_retries,
+         backoff_base,
+         last_rpc \\ nil
+       ) do
     empty_res =
       http_retry(
         fn ->
@@ -149,8 +164,28 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
               rpc: rpc_name
             })
 
-            _ = respond_to_rpc(acs_url, rpc_name, body_xml, device_id, device_state, (ns2 || prev_ns), timeout, id)
-            session_loop(acs_url, (ns2 || prev_ns), device_id, device_state, timeout, max_retries, backoff_base, rpc_name)
+            _ =
+              respond_to_rpc(
+                acs_url,
+                rpc_name,
+                body_xml,
+                device_id,
+                device_state,
+                ns2 || prev_ns,
+                timeout,
+                id
+              )
+
+            session_loop(
+              acs_url,
+              ns2 || prev_ns,
+              device_id,
+              device_state,
+              timeout,
+              max_retries,
+              backoff_base,
+              rpc_name
+            )
 
           {:ok, _other} ->
             {:error, :unexpected_envelope}
@@ -169,7 +204,16 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
 
   defp respond_to_rpc(acs_url, rpc, rpc_xml, device_id, device_state, ns, timeout, id)
 
-  defp respond_to_rpc(acs_url, "GetParameterValues", rpc_xml, device_id, device_state, ns, timeout, id) do
+  defp respond_to_rpc(
+         acs_url,
+         "GetParameterValues",
+         rpc_xml,
+         device_id,
+         device_state,
+         ns,
+         timeout,
+         id
+       ) do
     # Parse the GetParameterValues XML to extract requested parameter names
     requested_paths = parse_parameter_names(rpc_xml)
 
@@ -212,11 +256,19 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
-  defp respond_to_rpc(acs_url, "SetParameterValues", rpc_xml, _device_id, device_state, ns, timeout, id) do
+  defp respond_to_rpc(
+         acs_url,
+         "SetParameterValues",
+         rpc_xml,
+         _device_id,
+         device_state,
+         ns,
+         timeout,
+         id
+       ) do
     # Parse SetParameterValues XML to extract parameters
     params_to_set = parse_parameter_values(rpc_xml)
 
@@ -250,11 +302,19 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
-  defp respond_to_rpc(acs_url, "GetParameterNames", rpc_xml, _device_id, device_state, ns, timeout, id) do
+  defp respond_to_rpc(
+         acs_url,
+         "GetParameterNames",
+         rpc_xml,
+         _device_id,
+         device_state,
+         ns,
+         timeout,
+         id
+       ) do
     # Parse GetParameterNames RPC to extract path and next_level
     {path, next_level} =
       case Caretaker.TR069.RPC.GetParameterNames.decode(rpc_xml) do
@@ -273,7 +333,8 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
           Caretaker.CPE.DeviceState.get_parameter_names(state, path, next_level)
       end
 
-    with {:ok, body} <- Caretaker.TR069.RPC.GetParameterNamesResponse.encode(%{parameters: params}),
+    with {:ok, body} <-
+           Caretaker.TR069.RPC.GetParameterNamesResponse.encode(%{parameters: params}),
          {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
          {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
       :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
@@ -288,11 +349,19 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
-  defp respond_to_rpc(acs_url, "GetRPCMethods", _rpc_xml, _device_id, _device_state, ns, timeout, id) do
+  defp respond_to_rpc(
+         acs_url,
+         "GetRPCMethods",
+         _rpc_xml,
+         _device_id,
+         _device_state,
+         ns,
+         timeout,
+         id
+       ) do
     # Return list of supported RPC methods
     methods = [
       "GetRPCMethods",
@@ -324,11 +393,19 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
-  defp respond_to_rpc(acs_url, "GetParameterAttributes", rpc_xml, _device_id, device_state, ns, timeout, id) do
+  defp respond_to_rpc(
+         acs_url,
+         "GetParameterAttributes",
+         rpc_xml,
+         _device_id,
+         device_state,
+         ns,
+         timeout,
+         id
+       ) do
     # Parse GetParameterAttributes RPC to extract parameter names
     paths =
       case Caretaker.TR069.RPC.GetParameterAttributes.decode(rpc_xml) do
@@ -346,7 +423,8 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
           Caretaker.CPE.DeviceState.get_parameter_attributes(state, paths)
       end
 
-    with {:ok, body} <- Caretaker.TR069.RPC.GetParameterAttributesResponse.encode(%{parameters: params}),
+    with {:ok, body} <-
+           Caretaker.TR069.RPC.GetParameterAttributesResponse.encode(%{parameters: params}),
          {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
          {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
       :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
@@ -360,11 +438,19 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
-  defp respond_to_rpc(acs_url, "SetParameterAttributes", rpc_xml, _device_id, device_state, ns, timeout, id) do
+  defp respond_to_rpc(
+         acs_url,
+         "SetParameterAttributes",
+         rpc_xml,
+         _device_id,
+         device_state,
+         ns,
+         timeout,
+         id
+       ) do
     # Parse SetParameterAttributes RPC
     attrs =
       case Caretaker.TR069.RPC.SetParameterAttributes.decode(rpc_xml) do
@@ -373,7 +459,9 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
       end
 
     case device_state do
-      nil -> :ok
+      nil ->
+        :ok
+
       state when attrs != [] ->
         Caretaker.CPE.DeviceState.set_parameter_attributes(state, attrs)
 
@@ -381,7 +469,8 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
           count: length(attrs)
         })
 
-      _ -> :ok
+      _ ->
+        :ok
     end
 
     response = %Caretaker.TR069.RPC.SetParameterAttributesResponse{}
@@ -399,7 +488,6 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
@@ -418,13 +506,15 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
           {1, 0}
 
         state ->
-          case Caretaker.CPE.DeviceState.add_object_instance(state, object_path) do
-            {:ok, inst} -> {inst, 0}
-            {:error, _} -> {0, 1}
-          end
+          {:ok, inst} = Caretaker.CPE.DeviceState.add_object_instance(state, object_path)
+          {inst, 0}
       end
 
-    with {:ok, body} <- Caretaker.TR069.RPC.AddObjectResponse.encode(%{instance_number: instance_number, status: status}),
+    with {:ok, body} <-
+           Caretaker.TR069.RPC.AddObjectResponse.encode(%{
+             instance_number: instance_number,
+             status: status
+           }),
          {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
          {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
       :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
@@ -439,7 +529,6 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
@@ -478,7 +567,6 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
@@ -541,7 +629,6 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
   end
 
@@ -578,11 +665,11 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
     else
       {:ok, %{status: status}} -> {:error, {:http, status}}
       {:error, reason} -> {:error, reason}
-      _ -> :reboot
     end
   end
 
-  defp respond_to_rpc(_acs_url, rpc, _rpc_xml, _device_id, _device_state, _ns, _timeout, _id) when is_binary(rpc) do
+  defp respond_to_rpc(_acs_url, rpc, _rpc_xml, _device_id, _device_state, _ns, _timeout, _id)
+       when is_binary(rpc) do
     :telemetry.execute([:caretaker, :cpe_client, :rpc, :unsupported], %{}, %{rpc: rpc})
     :ok
   end
@@ -602,7 +689,7 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
   # Parse ParameterNames from GetParameterValues XML
   # Extracts the "string" elements from the ParameterNames array
   defp parse_parameter_names(xml) do
-    case Lather.Xml.Parser.parse(xml) do
+    case parse_rpc_fragment(xml) do
       {:ok, parsed} ->
         parsed
         |> get_in(["ParameterNames", "string"])
@@ -620,7 +707,7 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
   # Parse ParameterList from SetParameterValues XML
   # Extracts name, value, and type from ParameterValueStruct elements
   defp parse_parameter_values(xml) do
-    case Lather.Xml.Parser.parse(xml) do
+    case parse_rpc_fragment(xml) do
       {:ok, parsed} ->
         parsed
         |> get_in(["ParameterList", "ParameterValueStruct"])
@@ -649,6 +736,20 @@ defp session_loop(acs_url, prev_ns, device_id, device_state, timeout, max_retrie
 
       {:error, _} ->
         []
+    end
+  end
+
+  defp parse_rpc_fragment(xml) when is_binary(xml) do
+    wrapped = [
+      "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\"",
+      " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"",
+      " xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">",
+      xml,
+      "</root>"
+    ]
+
+    with {:ok, parsed} <- Lather.Xml.Parser.parse(IO.iodata_to_binary(wrapped)) do
+      {:ok, parsed["root"] || %{}}
     end
   end
 

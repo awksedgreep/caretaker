@@ -10,16 +10,17 @@ defmodule Caretaker.USP.AgentTest do
     end
 
     test "starts an agent with initial parameters" do
-      {:ok, agent} = Agent.start_link(
-        endpoint_id: "os::ACME-Router-12345",
-        initial_params: %{
-          "Device" => %{
-            "DeviceInfo" => %{
-              "Manufacturer" => "TestCorp"
+      {:ok, agent} =
+        Agent.start_link(
+          endpoint_id: "os::ACME-Router-12345",
+          initial_params: %{
+            "Device" => %{
+              "DeviceInfo" => %{
+                "Manufacturer" => "TestCorp"
+              }
             }
           }
-        }
-      )
+        )
 
       state = Agent.get_state(agent)
       assert state["DeviceInfo"]["Manufacturer"] == "TestCorp"
@@ -28,18 +29,20 @@ defmodule Caretaker.USP.AgentTest do
 
   describe "handle_message/2 - Get" do
     setup do
-      {:ok, agent} = Agent.start_link(
-        endpoint_id: "os::ACME-Router-12345",
-        initial_params: %{
-          "Device" => %{
-            "DeviceInfo" => %{
-              "Manufacturer" => "Acme",
-              "ModelName" => "SuperRouter",
-              "SoftwareVersion" => "1.0.0"
+      {:ok, agent} =
+        Agent.start_link(
+          endpoint_id: "os::ACME-Router-12345",
+          initial_params: %{
+            "Device" => %{
+              "DeviceInfo" => %{
+                "Manufacturer" => "Acme",
+                "ModelName" => "SuperRouter",
+                "SoftwareVersion" => "1.0.0"
+              }
             }
           }
-        }
-      )
+        )
+
       {:ok, agent: agent}
     end
 
@@ -63,23 +66,26 @@ defmodule Caretaker.USP.AgentTest do
 
   describe "handle_message/2 - Set" do
     setup do
-      {:ok, agent} = Agent.start_link(
-        endpoint_id: "os::ACME-Router-12345",
-        initial_params: %{
-          "Device" => %{
-            "DeviceInfo" => %{
-              "SoftwareVersion" => "1.0.0"
+      {:ok, agent} =
+        Agent.start_link(
+          endpoint_id: "os::ACME-Router-12345",
+          initial_params: %{
+            "Device" => %{
+              "DeviceInfo" => %{
+                "SoftwareVersion" => "1.0.0"
+              }
             }
           }
-        }
-      )
+        )
+
       {:ok, agent: agent}
     end
 
     test "handles Set request", %{agent: agent} do
-      set_msg = Proto.build_set([
-        {"Device.DeviceInfo.", [SoftwareVersion: "2.0.0"]}
-      ])
+      set_msg =
+        Proto.build_set([
+          {"Device.DeviceInfo.", [SoftwareVersion: "2.0.0"]}
+        ])
 
       {:ok, response} = Agent.handle_message(agent, set_msg)
 
@@ -94,9 +100,10 @@ defmodule Caretaker.USP.AgentTest do
     end
 
     test "handles Add request", %{agent: agent} do
-      add_msg = Proto.build_add([
-        {"Device.NAT.PortMapping.", [ExternalPort: "8080"]}
-      ])
+      add_msg =
+        Proto.build_add([
+          {"Device.NAT.PortMapping.", [ExternalPort: "8080"]}
+        ])
 
       {:ok, response} = Agent.handle_message(agent, add_msg)
 
@@ -126,10 +133,11 @@ defmodule Caretaker.USP.AgentTest do
     end
 
     test "handles Operate request", %{agent: agent} do
-      operate_msg = Proto.build_operate(
-        "Device.IP.Diagnostics.IPPing()",
-        %{Host: "8.8.8.8"}
-      )
+      operate_msg =
+        Proto.build_operate(
+          "Device.IP.Diagnostics.IPPing()",
+          %{Host: "8.8.8.8"}
+        )
 
       {:ok, response} = Agent.handle_message(agent, operate_msg)
 
@@ -169,23 +177,27 @@ defmodule Caretaker.USP.AgentTest do
 
   describe "handle_record/2" do
     setup do
-      {:ok, agent} = Agent.start_link(
-        endpoint_id: "os::ACME-Router-12345",
-        initial_params: %{
-          "Device" => %{
-            "DeviceInfo" => %{"Manufacturer" => "Acme"}
+      {:ok, agent} =
+        Agent.start_link(
+          endpoint_id: "os::ACME-Router-12345",
+          initial_params: %{
+            "Device" => %{
+              "DeviceInfo" => %{"Manufacturer" => "Acme"}
+            }
           }
-        }
-      )
+        )
+
       {:ok, agent: agent}
     end
 
     test "handles a record and returns a response record", %{agent: agent} do
       get_msg = Proto.build_get(["Device.DeviceInfo."])
-      record = Record.new(get_msg,
-        to_id: "os::ACME-Router-12345",
-        from_id: "self::controller"
-      )
+
+      record =
+        Record.new(get_msg,
+          to_id: "os::ACME-Router-12345",
+          from_id: "self::controller"
+        )
 
       {:ok, response_record} = Agent.handle_record(agent, record)
 
@@ -225,14 +237,16 @@ defmodule Caretaker.USP.AgentTest do
 
   describe "set_parameter/3" do
     setup do
-      {:ok, agent} = Agent.start_link(
-        endpoint_id: "os::ACME-Router-12345",
-        initial_params: %{
-          "Device" => %{
-            "DeviceInfo" => %{"SoftwareVersion" => "1.0.0"}
+      {:ok, agent} =
+        Agent.start_link(
+          endpoint_id: "os::ACME-Router-12345",
+          initial_params: %{
+            "Device" => %{
+              "DeviceInfo" => %{"SoftwareVersion" => "1.0.0"}
+            }
           }
-        }
-      )
+        )
+
       {:ok, agent: agent}
     end
 

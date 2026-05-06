@@ -44,7 +44,17 @@ defmodule Caretaker.USP.Proto do
   # Core message types
   alias Caretaker.Proto.Usp.{Msg, Header, Body, Request, Error}
   # Request types
-  alias Caretaker.Proto.Usp.{Get, Set, Add, Delete, Operate, GetSupportedDM, GetInstances, Register}
+  alias Caretaker.Proto.Usp.{
+    Get,
+    Set,
+    Add,
+    Delete,
+    Operate,
+    GetSupportedDM,
+    GetInstances,
+    Register
+  }
+
   # Record types
   alias Caretaker.Proto.UspRecord.Record
 
@@ -141,12 +151,16 @@ defmodule Caretaker.USP.Proto do
         msg_type: :GET
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:get, %Get{
-            param_paths: param_paths,
-            max_depth: max_depth
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:get,
+                %Get{
+                  param_paths: param_paths,
+                  max_depth: max_depth
+                }}
+           }}
       }
     }
   end
@@ -177,20 +191,22 @@ defmodule Caretaker.USP.Proto do
 
     alias Caretaker.Proto.Usp.{UpdateObject, UpdateParamSetting}
 
-    update_objs = Enum.map(updates, fn {obj_path, params} ->
-      param_settings = Enum.map(params, fn {param, value} ->
-        %UpdateParamSetting{
-          param: to_string(param),
-          value: to_string(value),
-          required: true
+    update_objs =
+      Enum.map(updates, fn {obj_path, params} ->
+        param_settings =
+          Enum.map(params, fn {param, value} ->
+            %UpdateParamSetting{
+              param: to_string(param),
+              value: to_string(value),
+              required: true
+            }
+          end)
+
+        %UpdateObject{
+          obj_path: obj_path,
+          param_settings: param_settings
         }
       end)
-
-      %UpdateObject{
-        obj_path: obj_path,
-        param_settings: param_settings
-      }
-    end)
 
     %Msg{
       header: %Header{
@@ -198,12 +214,16 @@ defmodule Caretaker.USP.Proto do
         msg_type: :SET
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:set, %Set{
-            allow_partial: allow_partial,
-            update_objs: update_objs
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:set,
+                %Set{
+                  allow_partial: allow_partial,
+                  update_objs: update_objs
+                }}
+           }}
       }
     }
   end
@@ -226,20 +246,22 @@ defmodule Caretaker.USP.Proto do
 
     alias Caretaker.Proto.Usp.{CreateObject, CreateParamSetting}
 
-    create_objs = Enum.map(creates, fn {obj_path, params} ->
-      param_settings = Enum.map(params, fn {param, value} ->
-        %CreateParamSetting{
-          param: to_string(param),
-          value: to_string(value),
-          required: true
+    create_objs =
+      Enum.map(creates, fn {obj_path, params} ->
+        param_settings =
+          Enum.map(params, fn {param, value} ->
+            %CreateParamSetting{
+              param: to_string(param),
+              value: to_string(value),
+              required: true
+            }
+          end)
+
+        %CreateObject{
+          obj_path: obj_path,
+          param_settings: param_settings
         }
       end)
-
-      %CreateObject{
-        obj_path: obj_path,
-        param_settings: param_settings
-      }
-    end)
 
     %Msg{
       header: %Header{
@@ -247,12 +269,16 @@ defmodule Caretaker.USP.Proto do
         msg_type: :ADD
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:add, %Add{
-            allow_partial: allow_partial,
-            create_objs: create_objs
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:add,
+                %Add{
+                  allow_partial: allow_partial,
+                  create_objs: create_objs
+                }}
+           }}
       }
     }
   end
@@ -271,12 +297,16 @@ defmodule Caretaker.USP.Proto do
         msg_type: :DELETE
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:delete, %Delete{
-            allow_partial: allow_partial,
-            obj_paths: obj_paths
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:delete,
+                %Delete{
+                  allow_partial: allow_partial,
+                  obj_paths: obj_paths
+                }}
+           }}
       }
     }
   end
@@ -298,14 +328,18 @@ defmodule Caretaker.USP.Proto do
         msg_type: :OPERATE
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:operate, %Operate{
-            command: command,
-            command_key: command_key,
-            send_resp: send_resp,
-            input_args: string_args
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:operate,
+                %Operate{
+                  command: command,
+                  command_key: command_key,
+                  send_resp: send_resp,
+                  input_args: string_args
+                }}
+           }}
       }
     }
   end
@@ -323,16 +357,20 @@ defmodule Caretaker.USP.Proto do
         msg_type: :GET_SUPPORTED_DM
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:get_supported_dm, %GetSupportedDM{
-            obj_paths: obj_paths,
-            first_level_only: Keyword.get(opts, :first_level_only, false),
-            return_commands: Keyword.get(opts, :return_commands, true),
-            return_events: Keyword.get(opts, :return_events, true),
-            return_params: Keyword.get(opts, :return_params, true),
-            return_unique_key_sets: Keyword.get(opts, :return_unique_key_sets, false)
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:get_supported_dm,
+                %GetSupportedDM{
+                  obj_paths: obj_paths,
+                  first_level_only: Keyword.get(opts, :first_level_only, false),
+                  return_commands: Keyword.get(opts, :return_commands, true),
+                  return_events: Keyword.get(opts, :return_events, true),
+                  return_params: Keyword.get(opts, :return_params, true),
+                  return_unique_key_sets: Keyword.get(opts, :return_unique_key_sets, false)
+                }}
+           }}
       }
     }
   end
@@ -350,12 +388,16 @@ defmodule Caretaker.USP.Proto do
         msg_type: :GET_INSTANCES
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:get_instances, %GetInstances{
-            obj_paths: obj_paths,
-            first_level_only: Keyword.get(opts, :first_level_only, false)
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:get_instances,
+                %GetInstances{
+                  obj_paths: obj_paths,
+                  first_level_only: Keyword.get(opts, :first_level_only, false)
+                }}
+           }}
       }
     }
   end
@@ -370,9 +412,10 @@ defmodule Caretaker.USP.Proto do
 
     alias Caretaker.Proto.Usp.RegistrationPath
 
-    reg_paths = Enum.map(paths, fn path ->
-      %RegistrationPath{path: path}
-    end)
+    reg_paths =
+      Enum.map(paths, fn path ->
+        %RegistrationPath{path: path}
+      end)
 
     %Msg{
       header: %Header{
@@ -380,12 +423,16 @@ defmodule Caretaker.USP.Proto do
         msg_type: :REGISTER
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:register, %Register{
-            allow_partial: allow_partial,
-            reg_paths: reg_paths
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:register,
+                %Register{
+                  allow_partial: allow_partial,
+                  reg_paths: reg_paths
+                }}
+           }}
       }
     }
   end
@@ -403,11 +450,13 @@ defmodule Caretaker.USP.Proto do
         msg_type: :ERROR
       },
       body: %Body{
-        msg_body: {:error, %Error{
-          err_code: err_code,
-          err_msg: err_msg,
-          param_errs: []
-        }}
+        msg_body:
+          {:error,
+           %Error{
+             err_code: err_code,
+             err_msg: err_msg,
+             param_errs: []
+           }}
       }
     }
   end
@@ -446,21 +495,23 @@ defmodule Caretaker.USP.Proto do
 
     alias Caretaker.Proto.Usp.{GetResp, RequestedPathResult, ResolvedPathResult, Response}
 
-    req_path_results = Enum.map(results, fn {requested_path, resolved_results} ->
-      resolved = Enum.map(resolved_results, fn {resolved_path, params} ->
-        %ResolvedPathResult{
-          resolved_path: resolved_path,
-          result_params: Map.new(params, fn {k, v} -> {to_string(k), to_string(v)} end)
+    req_path_results =
+      Enum.map(results, fn {requested_path, resolved_results} ->
+        resolved =
+          Enum.map(resolved_results, fn {resolved_path, params} ->
+            %ResolvedPathResult{
+              resolved_path: resolved_path,
+              result_params: Map.new(params, fn {k, v} -> {to_string(k), to_string(v)} end)
+            }
+          end)
+
+        %RequestedPathResult{
+          requested_path: requested_path,
+          err_code: 0,
+          err_msg: "",
+          resolved_path_results: resolved
         }
       end)
-
-      %RequestedPathResult{
-        requested_path: requested_path,
-        err_code: 0,
-        err_msg: "",
-        resolved_path_results: resolved
-      }
-    end)
 
     %Msg{
       header: %Header{
@@ -468,11 +519,15 @@ defmodule Caretaker.USP.Proto do
         msg_type: :GET_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:get_resp, %GetResp{
-            req_path_results: req_path_results
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:get_resp,
+                %GetResp{
+                  req_path_results: req_path_results
+                }}
+           }}
       }
     }
   end
@@ -480,31 +535,42 @@ defmodule Caretaker.USP.Proto do
   @doc """
   Builds a SetResp response message.
   """
-  @spec build_set_resp([{String.t(), :success | {:error, non_neg_integer(), String.t()}}], keyword()) :: Msg.t()
+  @spec build_set_resp(
+          [{String.t(), :success | {:error, non_neg_integer(), String.t()}}],
+          keyword()
+        ) :: Msg.t()
   def build_set_resp(results, opts \\ []) when is_list(results) do
     msg_id = Keyword.get(opts, :msg_id, generate_msg_id())
 
-    alias Caretaker.Proto.Usp.{SetResp, UpdatedObjectResult, OperationStatus, OperationSuccess, OperationFailure, Response}
+    alias Caretaker.Proto.Usp.{
+      SetResp,
+      UpdatedObjectResult,
+      OperationStatus,
+      OperationSuccess,
+      OperationFailure,
+      Response
+    }
 
-    updated_results = Enum.map(results, fn
-      {path, :success} ->
-        %UpdatedObjectResult{
-          requested_path: path,
-          oper_status: %OperationStatus{
-            oper_status: {:oper_success, %OperationSuccess{}}
-          },
-          updated_inst_results: []
-        }
+    updated_results =
+      Enum.map(results, fn
+        {path, :success} ->
+          %UpdatedObjectResult{
+            requested_path: path,
+            oper_status: %OperationStatus{
+              oper_status: {:oper_success, %OperationSuccess{}}
+            },
+            updated_inst_results: []
+          }
 
-      {path, {:error, code, msg}} ->
-        %UpdatedObjectResult{
-          requested_path: path,
-          oper_status: %OperationStatus{
-            oper_status: {:oper_failure, %OperationFailure{err_code: code, err_msg: msg}}
-          },
-          updated_inst_results: []
-        }
-    end)
+        {path, {:error, code, msg}} ->
+          %UpdatedObjectResult{
+            requested_path: path,
+            oper_status: %OperationStatus{
+              oper_status: {:oper_failure, %OperationFailure{err_code: code, err_msg: msg}}
+            },
+            updated_inst_results: []
+          }
+      end)
 
     %Msg{
       header: %Header{
@@ -512,11 +578,15 @@ defmodule Caretaker.USP.Proto do
         msg_type: :SET_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:set_resp, %SetResp{
-            updated_obj_results: updated_results
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:set_resp,
+                %SetResp{
+                  updated_obj_results: updated_results
+                }}
+           }}
       }
     }
   end
@@ -524,37 +594,49 @@ defmodule Caretaker.USP.Proto do
   @doc """
   Builds an AddResp response message.
   """
-  @spec build_add_resp([{String.t(), {:ok, String.t()} | {:error, non_neg_integer(), String.t()}}], keyword()) :: Msg.t()
+  @spec build_add_resp(
+          [{String.t(), {:ok, String.t()} | {:error, non_neg_integer(), String.t()}}],
+          keyword()
+        ) :: Msg.t()
   def build_add_resp(results, opts \\ []) when is_list(results) do
     msg_id = Keyword.get(opts, :msg_id, generate_msg_id())
 
-    alias Caretaker.Proto.Usp.{AddResp, CreatedObjectResult, CreatedInstanceResult, OperationStatus, OperationSuccess, OperationFailure, Response}
+    alias Caretaker.Proto.Usp.{
+      AddResp,
+      CreatedObjectResult,
+      CreatedInstanceResult,
+      OperationStatus,
+      OperationSuccess,
+      OperationFailure,
+      Response
+    }
 
-    created_results = Enum.map(results, fn
-      {path, {:ok, instance_path}} ->
-        %CreatedObjectResult{
-          requested_path: path,
-          oper_status: %OperationStatus{
-            oper_status: {:oper_success, %OperationSuccess{}}
-          },
-          created_inst_results: [
-            %CreatedInstanceResult{
-              instantiated_path: instance_path,
-              param_errs: [],
-              unique_keys: %{}
-            }
-          ]
-        }
+    created_results =
+      Enum.map(results, fn
+        {path, {:ok, instance_path}} ->
+          %CreatedObjectResult{
+            requested_path: path,
+            oper_status: %OperationStatus{
+              oper_status: {:oper_success, %OperationSuccess{}}
+            },
+            created_inst_results: [
+              %CreatedInstanceResult{
+                instantiated_path: instance_path,
+                param_errs: [],
+                unique_keys: %{}
+              }
+            ]
+          }
 
-      {path, {:error, code, msg}} ->
-        %CreatedObjectResult{
-          requested_path: path,
-          oper_status: %OperationStatus{
-            oper_status: {:oper_failure, %OperationFailure{err_code: code, err_msg: msg}}
-          },
-          created_inst_results: []
-        }
-    end)
+        {path, {:error, code, msg}} ->
+          %CreatedObjectResult{
+            requested_path: path,
+            oper_status: %OperationStatus{
+              oper_status: {:oper_failure, %OperationFailure{err_code: code, err_msg: msg}}
+            },
+            created_inst_results: []
+          }
+      end)
 
     %Msg{
       header: %Header{
@@ -562,11 +644,15 @@ defmodule Caretaker.USP.Proto do
         msg_type: :ADD_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:add_resp, %AddResp{
-            created_obj_results: created_results
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:add_resp,
+                %AddResp{
+                  created_obj_results: created_results
+                }}
+           }}
       }
     }
   end
@@ -574,33 +660,44 @@ defmodule Caretaker.USP.Proto do
   @doc """
   Builds a DeleteResp response message.
   """
-  @spec build_delete_resp([{String.t(), :success | {:error, non_neg_integer(), String.t()}}], keyword()) :: Msg.t()
+  @spec build_delete_resp(
+          [{String.t(), :success | {:error, non_neg_integer(), String.t()}}],
+          keyword()
+        ) :: Msg.t()
   def build_delete_resp(results, opts \\ []) when is_list(results) do
     msg_id = Keyword.get(opts, :msg_id, generate_msg_id())
 
-    alias Caretaker.Proto.Usp.{DeleteResp, DeletedObjectResult, OperationStatus, OperationSuccess, OperationFailure, Response}
+    alias Caretaker.Proto.Usp.{
+      DeleteResp,
+      DeletedObjectResult,
+      OperationStatus,
+      OperationSuccess,
+      OperationFailure,
+      Response
+    }
 
-    deleted_results = Enum.map(results, fn
-      {path, :success} ->
-        %DeletedObjectResult{
-          requested_path: path,
-          oper_status: %OperationStatus{
-            oper_status: {:oper_success, %OperationSuccess{}}
-          },
-          affected_paths: [path],
-          unaffected_path_errs: []
-        }
+    deleted_results =
+      Enum.map(results, fn
+        {path, :success} ->
+          %DeletedObjectResult{
+            requested_path: path,
+            oper_status: %OperationStatus{
+              oper_status: {:oper_success, %OperationSuccess{}}
+            },
+            affected_paths: [path],
+            unaffected_path_errs: []
+          }
 
-      {path, {:error, code, msg}} ->
-        %DeletedObjectResult{
-          requested_path: path,
-          oper_status: %OperationStatus{
-            oper_status: {:oper_failure, %OperationFailure{err_code: code, err_msg: msg}}
-          },
-          affected_paths: [],
-          unaffected_path_errs: []
-        }
-    end)
+        {path, {:error, code, msg}} ->
+          %DeletedObjectResult{
+            requested_path: path,
+            oper_status: %OperationStatus{
+              oper_status: {:oper_failure, %OperationFailure{err_code: code, err_msg: msg}}
+            },
+            affected_paths: [],
+            unaffected_path_errs: []
+          }
+      end)
 
     %Msg{
       header: %Header{
@@ -608,11 +705,15 @@ defmodule Caretaker.USP.Proto do
         msg_type: :DELETE_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:delete_resp, %DeleteResp{
-            deleted_obj_results: deleted_results
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:delete_resp,
+                %DeleteResp{
+                  deleted_obj_results: deleted_results
+                }}
+           }}
       }
     }
   end
@@ -633,16 +734,22 @@ defmodule Caretaker.USP.Proto do
         msg_type: :NOTIFY
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:notify, %Notify{
-            subscription_id: subscription_id,
-            send_resp: send_resp,
-            notification: {:value_change, %ValueChange{
-              param_path: param_path,
-              param_value: param_value
-            }}
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:notify,
+                %Notify{
+                  subscription_id: subscription_id,
+                  send_resp: send_resp,
+                  notification:
+                    {:value_change,
+                     %ValueChange{
+                       param_path: param_path,
+                       param_value: param_value
+                     }}
+                }}
+           }}
       }
     }
   end
@@ -665,17 +772,23 @@ defmodule Caretaker.USP.Proto do
         msg_type: :NOTIFY
       },
       body: %Body{
-        msg_body: {:request, %Request{
-          req_type: {:notify, %Notify{
-            subscription_id: subscription_id,
-            send_resp: send_resp,
-            notification: {:event, %Event{
-              obj_path: obj_path,
-              event_name: event_name,
-              params: string_params
-            }}
-          }}
-        }}
+        msg_body:
+          {:request,
+           %Request{
+             req_type:
+               {:notify,
+                %Notify{
+                  subscription_id: subscription_id,
+                  send_resp: send_resp,
+                  notification:
+                    {:event,
+                     %Event{
+                       obj_path: obj_path,
+                       event_name: event_name,
+                       params: string_params
+                     }}
+                }}
+           }}
       }
     }
   end
@@ -695,11 +808,15 @@ defmodule Caretaker.USP.Proto do
         msg_type: :NOTIFY_RESP
       },
       body: %Body{
-        msg_body: {:response, %Response{
-          resp_type: {:notify_resp, %NotifyResp{
-            subscription_id: subscription_id
-          }}
-        }}
+        msg_body:
+          {:response,
+           %Response{
+             resp_type:
+               {:notify_resp,
+                %NotifyResp{
+                  subscription_id: subscription_id
+                }}
+           }}
       }
     }
   end
@@ -727,9 +844,11 @@ defmodule Caretaker.USP.Proto do
       to_id: Keyword.get(opts, :to_id, ""),
       from_id: Keyword.get(opts, :from_id, ""),
       payload_security: :PLAINTEXT,
-      record_type: {:no_session_context, %NoSessionContextRecord{
-        payload: payload
-      }}
+      record_type:
+        {:no_session_context,
+         %NoSessionContextRecord{
+           payload: payload
+         }}
     }
   end
 

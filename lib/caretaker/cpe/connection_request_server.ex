@@ -258,10 +258,6 @@ defmodule Caretaker.CPE.ConnectionRequestServer.Router do
 
       {:error, :no_behavior} ->
         send_resp(conn, 503, "Device not ready")
-
-      {:error, reason} ->
-        Logger.warning("Connection request failed for #{serial}: #{inspect(reason)}")
-        send_resp(conn, 500, "Internal error")
     end
   end
 

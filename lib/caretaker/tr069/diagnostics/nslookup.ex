@@ -7,7 +7,12 @@ defmodule Caretaker.TR069.Diagnostics.NSLookup do
   alias Caretaker.TR069.RPC.SetParameterValues
 
   @enforce_keys [:host_name]
-  defstruct host_name: nil, dns_server: nil, timeout: 2000, number_of_repetitions: 1, interface: nil, parameter_key: ""
+  defstruct host_name: nil,
+            dns_server: nil,
+            timeout: 2000,
+            number_of_repetitions: 1,
+            interface: nil,
+            parameter_key: ""
 
   @type t :: %__MODULE__{
           host_name: String.t(),
@@ -39,7 +44,11 @@ defmodule Caretaker.TR069.Diagnostics.NSLookup do
       [
         %{name: base <> "HostName", value: cfg.host_name, type: "xsd:string"},
         %{name: base <> "Timeout", value: Integer.to_string(cfg.timeout), type: "xsd:int"},
-        %{name: base <> "NumberOfRepetitions", value: Integer.to_string(cfg.number_of_repetitions), type: "xsd:int"},
+        %{
+          name: base <> "NumberOfRepetitions",
+          value: Integer.to_string(cfg.number_of_repetitions),
+          type: "xsd:int"
+        },
         %{name: base <> "DiagnosticsState", value: "Requested", type: "xsd:string"}
       ]
       |> maybe_add(cfg.dns_server, base <> "DNSServer", "xsd:string")
@@ -50,5 +59,7 @@ defmodule Caretaker.TR069.Diagnostics.NSLookup do
   end
 
   defp maybe_add(list, nil, _name, _type), do: list
-  defp maybe_add(list, val, name, type), do: list ++ [%{name: name, value: to_string(val), type: type}]
+
+  defp maybe_add(list, val, name, type),
+    do: list ++ [%{name: name, value: to_string(val), type: type}]
 end

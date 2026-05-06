@@ -3,17 +3,16 @@ defmodule Caretaker.CPE.RPCSuiteTest do
 
   alias Caretaker.CPE.{Client, DeviceState}
 
-  @port 4053
-  @acs_url "http://localhost:4053/cwmp"
-
   setup do
+    port = random_port()
+
     # Start dependencies
     _ = start_supervised(Caretaker.PubSub)
     _ = start_supervised(Caretaker.ACS.Session)
     _ = start_supervised({Finch, name: Caretaker.Finch})
 
     # Start the ACS server
-    {:ok, _} = start_supervised({Bandit, plug: Caretaker.ACS.Server, port: @port})
+    {:ok, _} = start_supervised({Bandit, plug: Caretaker.ACS.Server, port: port})
 
     # Create device state with profile
     device_id = %{
@@ -32,7 +31,7 @@ defmodule Caretaker.CPE.RPCSuiteTest do
       if Process.alive?(device_state), do: Agent.stop(device_state)
     end)
 
-    %{device_state: device_state}
+    %{device_state: device_state, acs_url: "http://localhost:#{port}/cwmp"}
   end
 
   describe "GetParameterNames" do
@@ -63,13 +62,20 @@ defmodule Caretaker.CPE.RPCSuiteTest do
       Caretaker.ACS.Session.queue_command(dev_key, gpn_body)
 
       # Pass device_id to ensure Inform uses the same identity
-      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+      assert {:ok, _result} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       # Skip auto-queued GetParameterValues (there might be 2 - one from upsert, one from Inform)
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
 
       # Verify telemetry shows NextLevel was true
-      assert_receive {:telemetry, %{rpc: "GetParameterNames", next_level: true, param_count: count}}, 1000
+      assert_receive {:telemetry,
+                      %{rpc: "GetParameterNames", next_level: true, param_count: count}},
+                     1000
+
       assert count > 0, "Expected immediate children of Device."
 
       :telemetry.detach("test-gpn-next-level")
@@ -101,7 +107,11 @@ defmodule Caretaker.CPE.RPCSuiteTest do
       Caretaker.ACS.Session.queue_command(dev_key, gpn_body)
 
       # Pass device_id to ensure Inform uses the same identity
-      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+      assert {:ok, _result} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       # Skip the auto-queued GetParameterValues
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
@@ -144,7 +154,11 @@ defmodule Caretaker.CPE.RPCSuiteTest do
       Caretaker.ACS.Session.queue_command(dev_key, grm_body)
 
       # Pass device_id to ensure Inform uses the same identity
-      assert {:ok, _result} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+      assert {:ok, _result} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       # Skip the auto-queued GetParameterValues
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
@@ -172,7 +186,11 @@ defmodule Caretaker.CPE.RPCSuiteTest do
 
       # Should return full paths like "Device.DeviceInfo.Manufacturer"
       assert length(names) > 5
-      assert Enum.all?(names, fn %{name: name} -> String.starts_with?(name, "Device.DeviceInfo.") end)
+
+      assert Enum.all?(names, fn %{name: name} ->
+               String.starts_with?(name, "Device.DeviceInfo.")
+             end)
+
       assert Enum.any?(names, fn %{name: name} -> name == "Device.DeviceInfo.Manufacturer" end)
     end
 
@@ -187,7 +205,8 @@ defmodule Caretaker.CPE.RPCSuiteTest do
 
   describe "DeviceState parameter attributes" do
     test "get_parameter_attributes returns default attributes", ctx do
-      attrs = DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.Manufacturer"])
+      attrs =
+        DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.Manufacturer"])
 
       assert length(attrs) == 1
       attr = hd(attrs)
@@ -208,7 +227,11 @@ defmodule Caretaker.CPE.RPCSuiteTest do
         }
       ])
 
-      attrs = DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.SoftwareVersion"])
+      attrs =
+        DeviceState.get_parameter_attributes(ctx.device_state, [
+          "Device.DeviceInfo.SoftwareVersion"
+        ])
+
       attr = hd(attrs)
       assert attr.notification == 2
     end
@@ -224,7 +247,9 @@ defmodule Caretaker.CPE.RPCSuiteTest do
         }
       ])
 
-      attrs = DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.Description"])
+      attrs =
+        DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.Description"])
+
       attr = hd(attrs)
       assert attr.access_list == ["Subscriber", "Admin"]
     end
@@ -307,7 +332,12 @@ defmodule Caretaker.CPE.RPCSuiteTest do
         |> Caretaker.TR069.RPC.GetParameterAttributes.encode()
 
       Caretaker.ACS.Session.queue_command(dev_key, gpa_body)
-      assert {:ok, _} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+
+      assert {:ok, _} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
       assert_receive {:telemetry, %{rpc: "GetParameterAttributes", param_count: count}}
@@ -347,13 +377,20 @@ defmodule Caretaker.CPE.RPCSuiteTest do
         })
 
       Caretaker.ACS.Session.queue_command(dev_key, spa_body)
-      assert {:ok, _} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+
+      assert {:ok, _} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
       assert_receive {:telemetry, %{rpc: "SetParameterAttributes"}}
 
       # Verify the attribute was updated
-      attrs = DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.Description"])
+      attrs =
+        DeviceState.get_parameter_attributes(ctx.device_state, ["Device.DeviceInfo.Description"])
+
       assert hd(attrs).notification == 2
 
       :telemetry.detach("test-spa")
@@ -381,7 +418,12 @@ defmodule Caretaker.CPE.RPCSuiteTest do
         |> Caretaker.TR069.RPC.AddObject.encode()
 
       Caretaker.ACS.Session.queue_command(dev_key, ao_body)
-      assert {:ok, _} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+
+      assert {:ok, _} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
       assert_receive {:telemetry, %{rpc: "AddObject", instance_number: inst, object_path: path}}
@@ -417,7 +459,12 @@ defmodule Caretaker.CPE.RPCSuiteTest do
         |> Caretaker.TR069.RPC.DeleteObject.encode()
 
       Caretaker.ACS.Session.queue_command(dev_key, do_body)
-      assert {:ok, _} = Client.run_session(@acs_url, device_state: ctx.device_state, device_id: device_id)
+
+      assert {:ok, _} =
+               Client.run_session(ctx.acs_url,
+                 device_state: ctx.device_state,
+                 device_id: device_id
+               )
 
       assert_receive {:telemetry, %{rpc: "GetParameterValues"}}
       assert_receive {:telemetry, %{rpc: "DeleteObject", object_path: path}}
@@ -428,5 +475,12 @@ defmodule Caretaker.CPE.RPCSuiteTest do
 
       :telemetry.detach("test-do")
     end
+  end
+
+  defp random_port do
+    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, {_address, port}} = :inet.sockname(socket)
+    :ok = :gen_tcp.close(socket)
+    port
   end
 end

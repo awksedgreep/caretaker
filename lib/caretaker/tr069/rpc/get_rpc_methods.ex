@@ -20,6 +20,7 @@ defmodule Caretaker.TR069.RPC.GetRPCMethods do
   def decode(xml) when is_binary(xml) do
     try do
       wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+
       with {:ok, _parsed} <- Lather.Xml.Parser.parse(wrapped) do
         {:ok, %__MODULE__{}}
       end

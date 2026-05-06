@@ -100,7 +100,8 @@ defmodule Caretaker.USP.Transport.MQTT.Topics do
       {:ok, {:controller, "self::acs"}}
 
   """
-  @spec parse_endpoint_from_topic(String.t()) :: {:ok, {:agent | :controller, String.t()}} | {:error, :invalid_topic}
+  @spec parse_endpoint_from_topic(String.t()) ::
+          {:ok, {:agent | :controller, String.t()}} | {:error, :invalid_topic}
   def parse_endpoint_from_topic(topic) do
     case String.split(topic, "/") do
       [@topic_prefix, "agent", endpoint_id, _type] ->

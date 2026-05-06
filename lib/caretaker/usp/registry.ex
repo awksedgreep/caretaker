@@ -42,8 +42,26 @@ defmodule Caretaker.USP.Registry do
 
   """
 
-  @request_types [:GET, :SET, :ADD, :DELETE, :OPERATE, :GET_SUPPORTED_DM, :GET_INSTANCES, :GET_SUPPORTED_PROTO]
-  @response_types [:GET_RESP, :SET_RESP, :ADD_RESP, :DELETE_RESP, :OPERATE_RESP, :GET_SUPPORTED_DM_RESP, :GET_INSTANCES_RESP, :GET_SUPPORTED_PROTO_RESP]
+  @request_types [
+    :GET,
+    :SET,
+    :ADD,
+    :DELETE,
+    :OPERATE,
+    :GET_SUPPORTED_DM,
+    :GET_INSTANCES,
+    :GET_SUPPORTED_PROTO
+  ]
+  @response_types [
+    :GET_RESP,
+    :SET_RESP,
+    :ADD_RESP,
+    :DELETE_RESP,
+    :OPERATE_RESP,
+    :GET_SUPPORTED_DM_RESP,
+    :GET_INSTANCES_RESP,
+    :GET_SUPPORTED_PROTO_RESP
+  ]
   @notification_types [:NOTIFY, :REGISTER, :DEREGISTER]
   @ack_types [:NOTIFY_RESP, :REGISTER_RESP, :DEREGISTER_RESP]
 
@@ -196,10 +214,11 @@ defmodule Caretaker.USP.Registry do
   """
   @spec string_to_type(String.t()) :: {:ok, atom()} | {:error, :unknown_type}
   def string_to_type(name) do
-    type = name
-    |> Macro.underscore()
-    |> String.upcase()
-    |> String.to_atom()
+    type =
+      name
+      |> Macro.underscore()
+      |> String.upcase()
+      |> String.to_atom()
 
     if type in all_types() do
       {:ok, type}

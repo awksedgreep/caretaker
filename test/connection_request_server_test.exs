@@ -8,12 +8,13 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   setup do
     # Start a fleet with behaviors enabled
-    {:ok, fleet} = Fleet.start_link(
-      acs_url: "http://localhost:4000/cwmp",
-      count: 3,
-      connection_delay: 0,
-      behaviors: [value_change_events: true]
-    )
+    {:ok, fleet} =
+      Fleet.start_link(
+        acs_url: "http://localhost:4000/cwmp",
+        count: 3,
+        connection_delay: 0,
+        behaviors: [value_change_events: true]
+      )
 
     {:ok, _} = Fleet.spawn_devices(fleet)
 
@@ -29,10 +30,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "start_link/1" do
     test "starts server on specified port", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       assert is_pid(server)
       assert Process.alive?(server)
@@ -42,11 +44,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "starts server with authentication", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port,
-        auth: %{username: "acs", password: "secret"}
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port,
+          auth: %{username: "acs", password: "secret"}
+        )
 
       assert is_pid(server)
       ConnectionRequestServer.stop(server)
@@ -55,11 +58,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "base_url/1" do
     test "returns correct base URL", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port,
-        host: "192.168.1.100"
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port,
+          host: "192.168.1.100"
+        )
 
       assert ConnectionRequestServer.base_url(server) == "http://192.168.1.100:#{port}"
       ConnectionRequestServer.stop(server)
@@ -68,11 +72,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "device_url/2" do
     test "returns correct device-specific URL", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port,
-        host: "192.168.1.100"
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port,
+          host: "192.168.1.100"
+        )
 
       url = ConnectionRequestServer.device_url(server, "FLEET0-000001")
       assert url == "http://192.168.1.100:#{port}/cr/FLEET0-000001"
@@ -83,10 +88,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "connection request handling" do
     test "triggers connection request event on device", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       # Make HTTP request to trigger connection request
       {:ok, response} = http_get("http://localhost:#{port}/cr/FLEET0-000001")
@@ -101,10 +107,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "returns 404 for non-existent device", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       {:ok, response} = http_get("http://localhost:#{port}/cr/NONEXISTENT-999999")
 
@@ -114,10 +121,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "returns 404 for invalid paths", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       {:ok, response} = http_get("http://localhost:#{port}/invalid/path")
 
@@ -129,10 +137,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "health check" do
     test "returns 200 OK on /health", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       {:ok, response} = http_get("http://localhost:#{port}/health")
 
@@ -145,11 +154,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "authentication" do
     test "rejects unauthenticated requests when auth is configured", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port,
-        auth: %{username: "acs", password: "secret"}
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port,
+          auth: %{username: "acs", password: "secret"}
+        )
 
       {:ok, response} = http_get("http://localhost:#{port}/cr/FLEET0-000001")
 
@@ -159,11 +169,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "accepts correctly authenticated requests", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port,
-        auth: %{username: "acs", password: "secret"}
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port,
+          auth: %{username: "acs", password: "secret"}
+        )
 
       credentials = Base.encode64("acs:secret")
       headers = [{"authorization", "Basic #{credentials}"}]
@@ -176,11 +187,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "rejects wrong credentials", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port,
-        auth: %{username: "acs", password: "secret"}
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port,
+          auth: %{username: "acs", password: "secret"}
+        )
 
       credentials = Base.encode64("acs:wrongpassword")
       headers = [{"authorization", "Basic #{credentials}"}]
@@ -193,11 +205,12 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "allows requests when no auth configured", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-        # No auth configured
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+          # No auth configured
+        )
 
       {:ok, response} = http_get("http://localhost:#{port}/cr/FLEET0-000001")
 
@@ -209,10 +222,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
 
   describe "telemetry events" do
     test "emits connection_request.received event", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       test_pid = self()
       ref = make_ref()
@@ -235,10 +249,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
     end
 
     test "emits connection_request.triggered event", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       test_pid = self()
       ref = make_ref()
@@ -260,11 +275,15 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
       ConnectionRequestServer.stop(server)
     end
 
-    test "emits connection_request.not_found event for missing device", %{fleet: fleet, port: port} do
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+    test "emits connection_request.not_found event for missing device", %{
+      fleet: fleet,
+      port: port
+    } do
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       test_pid = self()
       ref = make_ref()
@@ -299,10 +318,11 @@ defmodule Caretaker.CPE.ConnectionRequestServerTest do
         nil
       )
 
-      {:ok, server} = ConnectionRequestServer.start_link(
-        fleet: fleet,
-        port: port
-      )
+      {:ok, server} =
+        ConnectionRequestServer.start_link(
+          fleet: fleet,
+          port: port
+        )
 
       assert_receive {:telemetry, :started, %{port: ^port}}, 1_000
 

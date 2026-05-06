@@ -40,8 +40,6 @@ defmodule Caretaker.CPE.Simulation.DocsisChannelTest do
     end
 
     test "updates upstream power levels", %{device_state: state} do
-      initial_power = DeviceState.get(state, "Device.Docsis.Upstream.1.PowerLevel")
-
       :ok = DocsisChannel.update(state, scenario: :normal)
 
       final_power = DeviceState.get(state, "Device.Docsis.Upstream.1.PowerLevel")
@@ -187,7 +185,7 @@ defmodule Caretaker.CPE.Simulation.DocsisChannelTest do
   end
 
   describe "registration simulation" do
-    test "cycles through boot stages", %{device_state: state} do
+    test "cycles through boot stages", _ctx do
       # This is a long-running test, skip in CI unless needed
       # :ok = DocsisChannel.simulate_registration(state)
 
@@ -198,6 +196,7 @@ defmodule Caretaker.CPE.Simulation.DocsisChannelTest do
       # assert final_status == "Operational"
 
       # For now, just test that the function exists and accepts the right args
+      assert Code.ensure_loaded?(DocsisChannel)
       assert function_exported?(DocsisChannel, :simulate_registration, 1)
     end
   end
