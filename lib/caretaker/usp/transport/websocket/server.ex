@@ -184,9 +184,10 @@ defmodule Caretaker.USP.Transport.WebSocket.Server do
   @impl true
   def handle_info({:websocket, :message, %{from_id: agent_id} = record, ws_pid}, state) do
 
-    # Register connection if not already registered
+    # Track the latest socket for this agent, including a reconnection where a
+    # new socket arrives before the old one's disconnect has been processed.
     state =
-      if not Map.has_key?(state.connections, agent_id) do
+      if Map.get(state.connections, agent_id) != ws_pid do
         Logger.info("Agent connected via WebSocket: #{agent_id}")
         %{state | connections: Map.put(state.connections, agent_id, ws_pid)}
       else
@@ -210,7 +211,7 @@ defmodule Caretaker.USP.Transport.WebSocket.Server do
       {nil, _} ->
         {:noreply, state}
 
-      {from, new_pending} ->
+      {{from, _agent_id}, new_pending} ->
         GenServer.reply(from, {:error, :timeout})
         {:noreply, %{state | pending_requests: new_pending}}
     end
@@ -260,17 +261,17 @@ defmodule Caretaker.USP.Transport.WebSocket.Server do
   defp handle_incoming_message(msg, agent_id, state) do
     msg_id = Proto.message_id(msg)
 
-    # Check if this is a response to a pending request
-    case Map.pop(state.pending_requests, msg_id) do
-      {nil, _} ->
-        # Not a response, forward to controller
+    # A pending entry is {from, expected_agent_id}. Only the agent a request was
+    # sent to may answer it, so another connection cannot spoof from_id to
+    # hijack a pending request.
+    case Map.get(state.pending_requests, msg_id) do
+      {from, ^agent_id} ->
+        GenServer.reply(from, {:ok, msg})
+        {:noreply, %{state | pending_requests: Map.delete(state.pending_requests, msg_id)}}
+
+      _ ->
         Controller.handle_agent_message(state.controller, agent_id, msg)
         {:noreply, state}
-
-      {from, new_pending} ->
-        # Response to pending request
-        GenServer.reply(from, {:ok, msg})
-        {:noreply, %{state | pending_requests: new_pending}}
     end
   end
 
@@ -290,8 +291,8 @@ defmodule Caretaker.USP.Transport.WebSocket.Server do
 
         send(ws_pid, {:send_record, record})
 
-        # Register pending request
-        new_pending = Map.put(state.pending_requests, msg_id, from)
+        # Register pending request, tagged with the target agent id
+        new_pending = Map.put(state.pending_requests, msg_id, {from, agent_id})
 
         # Set timeout
         Process.send_after(self(), {:request_timeout, msg_id}, 30_000)
@@ -312,6 +313,21 @@ defmodule Caretaker.USP.Transport.WebSocket.Server.Plug do
   @impl Plug
   def init(opts), do: opts
 
+  # Echo the v1.usp subprotocol when the client offers it, as TR-369 requires.
+  defp negotiate_usp_subprotocol(conn) do
+    offered =
+      conn
+      |> get_req_header("sec-websocket-protocol")
+      |> Enum.flat_map(&String.split(&1, ",", trim: true))
+      |> Enum.map(&String.trim/1)
+
+    if Paths.subprotocol() in offered do
+      put_resp_header(conn, "sec-websocket-protocol", Paths.subprotocol())
+    else
+      conn
+    end
+  end
+
   @impl Plug
   def call(conn, opts) do
     path = conn.request_path
@@ -326,6 +342,7 @@ defmodule Caretaker.USP.Transport.WebSocket.Server.Plug do
         }
 
         conn
+        |> negotiate_usp_subprotocol()
         |> WebSockAdapter.upgrade(Handler, handler_opts, [])
         |> halt()
 

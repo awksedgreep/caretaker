@@ -59,7 +59,9 @@ defmodule Caretaker.TR069.RPC.Fault do
             root["Fault"] || %{}
 
         # Prefer a top-level cwmp:Fault, then the one nested in the SOAP detail
-        cf = root["cwmp:Fault"] || get_in(sf, ["detail", "cwmp:Fault"]) || get_in(sf, ["detail", "Fault"])
+        cf =
+          root["cwmp:Fault"] || get_in(sf, ["detail", "cwmp:Fault"]) ||
+            get_in(sf, ["detail", "Fault"])
 
         {code, string} =
           if is_map(cf) do

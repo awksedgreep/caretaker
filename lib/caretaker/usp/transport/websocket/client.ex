@@ -246,7 +246,10 @@ defmodule Caretaker.USP.Transport.WebSocket.Client do
 
     with {:ok, conn} <-
            Mint.HTTP.connect(http_scheme, state.controller_host, state.controller_port),
-         {:ok, conn, ref} <- Mint.WebSocket.upgrade(websocket_scheme, conn, path, []) do
+         {:ok, conn, ref} <-
+           Mint.WebSocket.upgrade(websocket_scheme, conn, path, [
+             {"sec-websocket-protocol", Paths.subprotocol()}
+           ]) do
       {:ok, %{state | conn: conn, ref: ref, connected: false}}
     end
   end

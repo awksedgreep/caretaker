@@ -58,7 +58,10 @@ defmodule Caretaker.HTTP.Auth do
     nonce = Map.get(params, "nonce", "")
     opaque = Map.get(params, "opaque")
     algorithm = Map.get(params, "algorithm", "MD5")
-    qop = params |> Map.get("qop", "") |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+
+    qop =
+      params |> Map.get("qop", "") |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+
     method_str = method |> to_string() |> String.upcase()
 
     cnonce = Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
