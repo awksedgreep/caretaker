@@ -71,6 +71,23 @@ defmodule Caretaker.ACS.ServerTest do
     assert conn.status == 400
   end
 
+  test "error responses carry a parseable CWMP SOAP Fault body" do
+    conn =
+      conn(:post, "/cwmp", "<not-soap/>")
+      |> Plug.Conn.put_req_header("content-type", "text/xml")
+
+    conn = Caretaker.ACS.Server.call(conn, Caretaker.ACS.Server.init([]))
+
+    assert conn.status == 400
+    assert Plug.Conn.get_resp_header(conn, "content-type") == [Caretaker.CWMP.SOAP.content_type()]
+
+    assert {:ok, %{body: %{rpc: "Fault", xml: fault_xml}}} =
+             Caretaker.CWMP.SOAP.decode_envelope(conn.resp_body)
+
+    assert {:ok, %Caretaker.TR069.RPC.Fault{code: "8005"}} =
+             Caretaker.TR069.RPC.Fault.decode(fault_xml)
+  end
+
   test "child_spec returns Bandit with proper defaults and overrides" do
     # Defaults
     assert {Bandit, opts} = Caretaker.ACS.Server.child_spec()

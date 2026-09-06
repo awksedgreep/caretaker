@@ -230,8 +230,7 @@ defmodule Caretaker.USP.Agent do
 
   @impl true
   def handle_call({:set_parameter, path, value}, _from, state) do
-    result = DeviceState.set(state.device_state, path, value)
-    {:reply, result, state}
+    {:reply, safe_set(state.device_state, path, value), state}
   end
 
   @impl true
@@ -343,8 +342,11 @@ defmodule Caretaker.USP.Agent do
       Enum.flat_map(set.update_objs, fn update_obj ->
         Enum.map(update_obj.param_settings, fn setting ->
           full_path = update_obj.obj_path <> setting.param
-          :ok = DeviceState.set(state.device_state, full_path, setting.value)
-          {full_path, :success}
+
+          case safe_set(state.device_state, full_path, setting.value) do
+            :ok -> {full_path, :success}
+            {:error, reason} -> {full_path, {:error, 7010, "Failed to set value: #{inspect(reason)}"}}
+          end
         end)
       end)
 
@@ -355,21 +357,42 @@ defmodule Caretaker.USP.Agent do
   defp handle_add(add, msg_id, state) do
     results =
       Enum.map(add.create_objs, fn create_obj ->
-        {:ok, instance_num} =
-          DeviceState.add_object_instance(state.device_state, create_obj.obj_path)
-
-        instance_path = create_obj.obj_path <> "#{instance_num}."
-
-        # Set initial parameters
-        Enum.each(create_obj.param_settings, fn setting ->
-          DeviceState.set(state.device_state, instance_path <> setting.param, setting.value)
-        end)
-
-        {create_obj.obj_path, {:ok, instance_path}}
+        case safe_add(state.device_state, create_obj) do
+          {:ok, instance_path} -> {create_obj.obj_path, {:ok, instance_path}}
+          {:error, reason} -> {create_obj.obj_path, {:error, 7005, "Failed to create object: #{inspect(reason)}"}}
+        end
       end)
 
     response = Proto.build_add_resp(results, msg_id: msg_id)
     {:ok, response, state}
+  end
+
+  # DeviceState is a separate process; wrap access so a failed or unavailable
+  # state store yields a USP error result rather than crashing the Agent.
+  defp safe_set(device_state, path, value) do
+    case DeviceState.set(device_state, path, value) do
+      :ok -> :ok
+      other -> {:error, other}
+    end
+  rescue
+    e -> {:error, e}
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  defp safe_add(device_state, create_obj) do
+    {:ok, instance_num} = DeviceState.add_object_instance(device_state, create_obj.obj_path)
+    instance_path = create_obj.obj_path <> "#{instance_num}."
+
+    Enum.each(create_obj.param_settings, fn setting ->
+      DeviceState.set(device_state, instance_path <> setting.param, setting.value)
+    end)
+
+    {:ok, instance_path}
+  rescue
+    e -> {:error, e}
+  catch
+    :exit, reason -> {:error, reason}
   end
 
   defp handle_delete(delete, msg_id, state) do

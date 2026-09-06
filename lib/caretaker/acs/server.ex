@@ -39,7 +39,7 @@ defmodule Caretaker.ACS.Server do
     conn =
       cond do
         not acceptable_content_type?(conn) ->
-          text(conn, 415, "Unsupported Media Type")
+          soap_fault(conn, 415, "8005", "Unsupported media type")
 
         body == <<>> ->
           next_or_204(conn, caller_key)
@@ -93,11 +93,11 @@ defmodule Caretaker.ACS.Server do
         if String.ends_with?(rpc, "Response") do
           acknowledge_response(conn, caller_key, rpc)
         else
-          text(conn, 400, "Bad Request")
+          soap_fault(conn, 400, "8005", "Request could not be processed")
         end
 
       _other ->
-        text(conn, 400, "Bad Request")
+        soap_fault(conn, 400, "8005", "Request could not be processed")
     end
   end
 
@@ -116,7 +116,7 @@ defmodule Caretaker.ACS.Server do
          {:ok, envelope} <- SOAP.encode_envelope(resp_body, %{id: id, cwmp_ns: ns}) do
       xml(conn, 200, envelope)
     else
-      _ -> text(conn, 400, "Bad Request")
+      _ -> soap_fault(conn, 400, "8005", "Request could not be processed")
     end
   end
 
@@ -137,7 +137,7 @@ defmodule Caretaker.ACS.Server do
         xml(conn, 200, envelope)
 
       _ ->
-        text(conn, 400, "Bad Request")
+        soap_fault(conn, 400, "8005", "Request could not be processed")
     end
   end
 
@@ -171,13 +171,13 @@ defmodule Caretaker.ACS.Server do
 
               {:error, errs} ->
                 Logger.warning("ACS GPV response rejected by schema: #{inspect(errs)}")
-                text(conn, 400, "Bad Request")
+                soap_fault(conn, 400, "8005", "Request could not be processed")
             end
         end
 
       _ ->
         # No session bound to this caller: nothing to store, nothing queued
-        if session_running?(), do: text(conn, 400, "Bad Request"), else: text(conn, 204, "")
+        if session_running?(), do: soap_fault(conn, 400, "8005", "Request could not be processed"), else: text(conn, 204, "")
     end
   end
 
@@ -318,6 +318,17 @@ defmodule Caretaker.ACS.Server do
     conn
     |> Plug.Conn.put_resp_header("content-type", "text/plain")
     |> Plug.Conn.send_resp(status, body)
+  end
+
+  # Return a CWMP SOAP Fault envelope so a CPE receives a parseable SOAP body
+  # instead of plain text on an error. faultcode is "Client" (the CPE's request
+  # could not be processed); `code`/`string` carry the CWMP fault detail.
+  defp soap_fault(conn, status, code, string) do
+    fault = Caretaker.TR069.RPC.Fault.new(code, string, faultcode: "Client")
+    {:ok, fault_body} = Caretaker.TR069.RPC.Fault.encode(fault)
+    id = Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
+    {:ok, env} = SOAP.encode_envelope(fault_body, %{id: id, cwmp_ns: @default_cwmp_ns})
+    xml(conn, status, env)
   end
 
   defp xml(conn, status, envelope) do

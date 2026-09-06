@@ -179,6 +179,11 @@ defmodule Caretaker.CWMP.SOAP do
 
   defp normalize_prefix(frag, key) do
     case String.split(key, ":") do
+      # A SOAP Fault keeps its own prefix; rewriting it to cwmp: would collide
+      # with the nested cwmp:Fault detail element and lose the fault code.
+      [_prefix, "Fault"] ->
+        frag
+
       [prefix, local] when prefix != "cwmp" ->
         frag
         |> String.replace("<" <> key, "<cwmp:" <> local)

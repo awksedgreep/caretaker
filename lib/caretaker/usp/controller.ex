@@ -419,8 +419,8 @@ defmodule Caretaker.USP.Controller do
       {:register, register} ->
         handle_register(agent_id, register, msg_id, state)
 
-      {:deregister, _deregister} ->
-        handle_deregister(agent_id, msg_id, state)
+      {:deregister, deregister} ->
+        handle_deregister(agent_id, deregister, msg_id, state)
 
       {:notify, notify} ->
         handle_notify(agent_id, notify, msg_id, state)
@@ -449,7 +449,7 @@ defmodule Caretaker.USP.Controller do
   # Request Handlers
   # ============================================================================
 
-  defp handle_register(agent_id, _register, msg_id, state) do
+  defp handle_register(agent_id, register, msg_id, state) do
     Logger.info("Agent registered: #{agent_id}")
     Telemetry.emit_agent_connected(agent_id)
 
@@ -475,14 +475,15 @@ defmodule Caretaker.USP.Controller do
              resp_type:
                {:register_resp,
                 %RegisterResp{
-                  registered_path_results: [
-                    %RegisteredPathResult{
-                      requested_path: "Device.",
-                      oper_status: %OperationStatus{
-                        oper_status: {:oper_success, %OperationSuccess{}}
+                  registered_path_results:
+                    Enum.map(register_paths(register), fn path ->
+                      %RegisteredPathResult{
+                        requested_path: path,
+                        oper_status: %OperationStatus{
+                          oper_status: {:oper_success, %OperationSuccess{}}
+                        }
                       }
-                    }
-                  ]
+                    end)
                 }}
            }}
       }
@@ -491,7 +492,7 @@ defmodule Caretaker.USP.Controller do
     {:ok, response, new_state}
   end
 
-  defp handle_deregister(agent_id, msg_id, state) do
+  defp handle_deregister(agent_id, deregister, msg_id, state) do
     Logger.info("Agent deregistered: #{agent_id}")
     Telemetry.emit_agent_disconnected(agent_id)
 
@@ -517,14 +518,15 @@ defmodule Caretaker.USP.Controller do
              resp_type:
                {:deregister_resp,
                 %DeregisterResp{
-                  deregistered_path_results: [
-                    %DeregisteredPathResult{
-                      requested_path: "Device.",
-                      oper_status: %OperationStatus{
-                        oper_status: {:oper_success, %OperationSuccess{}}
+                  deregistered_path_results:
+                    Enum.map(deregister_paths(deregister), fn path ->
+                      %DeregisteredPathResult{
+                        requested_path: path,
+                        oper_status: %OperationStatus{
+                          oper_status: {:oper_success, %OperationSuccess{}}
+                        }
                       }
-                    }
-                  ]
+                    end)
                 }}
            }}
       }
@@ -575,6 +577,14 @@ defmodule Caretaker.USP.Controller do
   # ============================================================================
   # Helpers
   # ============================================================================
+
+  defp register_paths(%{reg_paths: paths}) when is_list(paths) and paths != [],
+    do: Enum.map(paths, & &1.path)
+
+  defp register_paths(_), do: ["Device."]
+
+  defp deregister_paths(%{paths: paths}) when is_list(paths) and paths != [], do: paths
+  defp deregister_paths(_), do: ["Device."]
 
   defp register_agent(agent_id, state) do
     session = %{
