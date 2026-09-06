@@ -124,6 +124,36 @@ All events are prefixed with `:caretaker`.
   - measurements: %{}
   - metadata: %{serial}
 
+## ACS task and queue events (stable public contract)
+
+These `[:caretaker, :acs, ...]` events are a supported, stable contract for
+building metrics and dashboards without polling. Event names, measurements and
+metadata will not change incompatibly within a major version.
+
+Inform intake:
+- `[:caretaker, :acs, :inform, :received]` — measurements `%{}`, metadata `%{device_id}`
+- `[:caretaker, :acs, :auth, :failed]` — an inbound request failed authentication; metadata `%{path}`
+- `[:caretaker, :acs, :transfer_complete, :received]` — metadata `%{command_key, fault_code}`
+- `[:caretaker, :acs, :fault, :received]` — a CPE SOAP fault; metadata `%{fault_code, fault_string}`
+
+Command queue:
+- `[:caretaker, :acs, :queue, :enqueue]` — metadata `%{rpc}`
+- `[:caretaker, :acs, :queue, :dequeue]` — metadata `%{rpc}`
+- `[:caretaker, :acs, :queue, :expired]` — a queued command passed its TTL; measurements `%{count}`, metadata `%{device_key, tag}`
+- `[:caretaker, :acs, :queue, :cancelled]` — a bulk cancel by tag; measurements `%{count}`, metadata `%{tag}`
+
+Task lifecycle (northbound API):
+- `[:caretaker, :acs, :task, :submitted]` — metadata `%{type, task_id}`
+- `[:caretaker, :acs, :task, :delivered]` — metadata `%{task_id}`
+- `[:caretaker, :acs, :task, :applied]` — metadata `%{task_id}`
+- `[:caretaker, :acs, :task, :faulted]` — metadata `%{task_id}`
+- `[:caretaker, :acs, :task, :expired]` — metadata `%{task_id}`
+- `[:caretaker, :acs, :task, :cancelled]` — metadata `%{task_id}`
+
+Every task reaches exactly one terminal state (`applied`, `faulted`, `expired`,
+`cancelled`), so an operator console can count in-flight vs terminal purely from
+these events.
+
 ## Usage
 
 Attach a handler in tests or your application:

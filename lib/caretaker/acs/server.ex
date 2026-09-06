@@ -23,6 +23,22 @@ defmodule Caretaker.ACS.Server do
   @default_cwmp_ns "urn:dslforum-org:cwmp-1-0"
   @session_cookie "caretaker_sid"
 
+  # Store mount opts (e.g. inbound auth config) so route handlers can read them.
+  @impl Plug
+  def init(opts) do
+    case Keyword.get(opts, :auth) do
+      nil -> opts
+      auth -> Keyword.put(opts, :auth, Caretaker.ACS.Auth.prepare(auth))
+    end
+  end
+
+  @impl Plug
+  def call(conn, opts) do
+    conn
+    |> Plug.Conn.put_private(:acs_opts, opts)
+    |> super(opts)
+  end
+
   plug(:match)
   plug(:dispatch)
 
@@ -38,6 +54,9 @@ defmodule Caretaker.ACS.Server do
 
     conn =
       cond do
+        not authenticated?(conn) ->
+          unauthorized(conn)
+
         not acceptable_content_type?(conn) ->
           soap_fault(conn, 415, "8005", "Unsupported media type")
 
@@ -64,8 +83,14 @@ defmodule Caretaker.ACS.Server do
   @doc "Child spec to start Bandit with this router"
   @spec child_spec(keyword()) :: {Bandit, keyword()}
   def child_spec(opts \\ []) do
+    plug =
+      case Keyword.get(opts, :auth) do
+        nil -> __MODULE__
+        auth -> {__MODULE__, [auth: auth]}
+      end
+
     bandit_opts = [
-      plug: __MODULE__,
+      plug: plug,
       port: Keyword.get(opts, :port, 4000),
       scheme: Keyword.get(opts, :scheme, :http)
     ]
@@ -102,7 +127,8 @@ defmodule Caretaker.ACS.Server do
   end
 
   defp handle_inform(conn, caller_key, id, ns, inform_xml) do
-    with {:ok, inform} <- Caretaker.TR069.RPC.Inform.decode(inform_xml),
+    with {:ok, decoded} <- Caretaker.TR069.RPC.Inform.decode(inform_xml),
+         inform = %{decoded | source_ip: source_ip(conn)},
          :ok <- Caretaker.PubSub.broadcast(Caretaker.PubSub.topic_tr069_inform(), inform),
          _ <-
            :telemetry.execute([:caretaker, :acs, :inform, :received], %{}, %{
@@ -296,6 +322,35 @@ defmodule Caretaker.ACS.Server do
 
   # -- Request helpers --
 
+  # Inbound authentication (optional; configured via mount opts). No config
+  # means the ACS accepts unauthenticated Informs (the default).
+  defp authenticated?(conn) do
+    case conn.private[:acs_opts][:auth] do
+      nil ->
+        true
+
+      auth ->
+        header =
+          case Plug.Conn.get_req_header(conn, "authorization") do
+            [value | _] -> value
+            [] -> nil
+          end
+
+        Caretaker.ACS.Auth.verify(header, "POST", conn.request_path, auth)
+    end
+  end
+
+  defp unauthorized(conn) do
+    auth = conn.private[:acs_opts][:auth]
+
+    :telemetry.execute([:caretaker, :acs, :auth, :failed], %{}, %{path: conn.request_path})
+
+    conn
+    |> Plug.Conn.put_resp_header("www-authenticate", Caretaker.ACS.Auth.challenge(auth))
+    |> Plug.Conn.put_resp_header("content-type", "text/plain")
+    |> Plug.Conn.send_resp(401, "Unauthorized")
+  end
+
   defp acceptable_content_type?(conn) do
     case Plug.Conn.get_req_header(conn, "content-type") do
       [] -> true
@@ -307,6 +362,22 @@ defmodule Caretaker.ACS.Server do
     case conn.cookies do
       %{@session_cookie => sid} when is_binary(sid) and sid != "" -> {:cookie, sid}
       _ -> peer_key(conn)
+    end
+  end
+
+  # The CPE's source IP as a string, for northbound consumers (presence, the
+  # Inform broadcast). Uses the TCP peer address, falling back to remote_ip.
+  defp source_ip(conn) do
+    ip =
+      try do
+        Plug.Conn.get_peer_data(conn).address
+      rescue
+        _ -> conn.remote_ip
+      end
+
+    case ip do
+      nil -> nil
+      tuple -> tuple |> :inet.ntoa() |> to_string()
     end
   end
 

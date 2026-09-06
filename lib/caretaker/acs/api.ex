@@ -68,6 +68,31 @@ defmodule Caretaker.ACS.API do
     end)
   end
 
+  # -- CR-40: submit Reboot / Download / FactoryReset --
+  post "/api/v1/devices/:device_id/tasks/reboot" do
+    with_rate_limit(conn, fn conn ->
+      submit_response(conn, Tasks.submit_reboot(device_id, task_opts(conn.body_params)))
+    end)
+  end
+
+  post "/api/v1/devices/:device_id/tasks/factory-reset" do
+    with_rate_limit(conn, fn conn ->
+      submit_response(conn, Tasks.submit_factory_reset(device_id, task_opts(conn.body_params)))
+    end)
+  end
+
+  post "/api/v1/devices/:device_id/tasks/download" do
+    with_rate_limit(conn, fn conn ->
+      spec = Map.take(conn.body_params, ~w(url file_type file_size delay_seconds target_file_name username password command_key))
+      submit_response(conn, Tasks.submit_download(device_id, spec, task_opts(conn.body_params)))
+    end)
+  end
+
+  # -- CR-45: latest-known parameter cache --
+  get "/api/v1/devices/:device_id/parameters" do
+    json(conn, 200, %{"device_id" => device_id, "parameters" => Tasks.parameters(device_id)})
+  end
+
   # -- CR-3: task status --
   get "/api/v1/tasks/:task_id" do
     case Tasks.get(task_id) do
@@ -127,7 +152,13 @@ defmodule Caretaker.ACS.API do
 
   # -- CR-6: connection request --
   post "/api/v1/devices/:device_id/connection-request" do
-    result = Tasks.connection_request(device_id)
+    opts =
+      []
+      |> put_opt(:username, conn.body_params["username"])
+      |> put_opt(:password, conn.body_params["password"])
+      |> put_opt(:scheme, cr_scheme(conn.body_params["scheme"]))
+
+    result = Tasks.connection_request(device_id, opts)
     status = if result["requested"], do: 200, else: 502
     json(conn, status, result)
   end
@@ -184,6 +215,10 @@ defmodule Caretaker.ACS.API do
 
   defp ttl_ms(%{"ttl_seconds" => s}) when is_integer(s) and s >= 0, do: s * 1000
   defp ttl_ms(_), do: nil
+
+  defp cr_scheme("basic"), do: :basic
+  defp cr_scheme("digest"), do: :digest
+  defp cr_scheme(_), do: nil
 
   defp submit_response(conn, result) do
     case result do

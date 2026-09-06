@@ -167,3 +167,92 @@ cancel operates on.
 `[:caretaker, :acs, :task, :submitted]` on submit, and
 `[:caretaker, :acs, :task, <state>]` on each transition
 (`delivered`, `applied`, `faulted`, `expired`, `cancelled`).
+
+## Non-parameter RPCs (Reboot / Download / FactoryReset)
+
+The same task machinery queues CPE-directed RPCs beyond get/set:
+
+```
+POST /api/v1/devices/:device_id/tasks/reboot
+POST /api/v1/devices/:device_id/tasks/factory-reset
+POST /api/v1/devices/:device_id/tasks/download
+{ "url": "http://f/img.bin", "file_type": "1 Firmware Upgrade Image",
+  "file_size": 1048576, "delay_seconds": 0 }
+→ 202 { "task_id": "tsk_...", "state": "queued" }
+```
+
+Also available in-process: `Tasks.submit_reboot/2`, `Tasks.submit_download/3`,
+`Tasks.submit_factory_reset/2`. They share TTL, tag and idempotency options and
+reach a terminal state via the same status/webhook path.
+
+## Latest-known parameter cache
+
+```
+GET /api/v1/devices/:device_id/parameters
+→ { "device_id": "...", "parameters": {
+      "Device.DeviceInfo.SoftwareVersion": { "value": "9.9.9", "updated_at": "..." } } }
+```
+
+Values come from Informs and completed Get tasks, each with a timestamp. Reading
+this warm cache avoids a CPE round-trip; fall back to `submit_get` when a value
+is stale or absent. In-process: `Tasks.parameters/1`.
+
+## Presence now includes source IP and ConnectionRequestURL
+
+`GET /devices/:id/presence` (and `presence_bulk/1`) additionally return:
+
+- `source_ip` — the CPE's TCP source address from its last Inform
+- `connection_request_url` — as reported in the Inform
+- `wan_ip` — the reported WAN IPv4, when present
+
+This lets a consumer correlate an informing device to an external record (e.g. a
+DHCP lease) by source/WAN IP.
+
+## Connection request with authentication
+
+Real CPEs protect their ConnectionRequestURL with Basic/Digest auth. Supply
+credentials per call, or configure an ACS-wide default on `Tasks` start_link
+(`connection_request_auth: %{scheme: :digest, username:, password:}`):
+
+```
+POST /api/v1/devices/:device_id/connection-request
+{ "scheme": "digest", "username": "acs", "password": "..." }
+→ 200 { "requested": true, "session_established": true }
+```
+
+## Inbound ACS authentication
+
+`Caretaker.ACS.Server` can require Basic or Digest auth on inbound Informs,
+configured at mount:
+
+```elixir
+{Bandit, plug: {Caretaker.ACS.Server,
+  auth: %{scheme: :digest, realm: "acs", username: "u", password: "p"}}}
+# or, for per-device credentials:
+auth: %{scheme: :digest, realm: "acs", lookup: fn username -> {:ok, password} | :error end}
+```
+
+Unauthenticated requests get `401` with a `WWW-Authenticate` challenge. With no
+`auth` configured the ACS accepts unauthenticated Informs (the default).
+
+## Inform subscription (self-discovery)
+
+Every Inform is broadcast; subscribe to self-populate inventory:
+
+```elixir
+{:ok, _} = Caretaker.ACS.on_inform(fn inform ->
+  MyApp.Inventory.observe(inform.device_id, inform.source_ip, inform.parameter_list)
+end)
+```
+
+Each Inform carries `device_id`, `events`, `parameter_list` and `source_ip`.
+See `Caretaker.ACS` for the mailbox-style `subscribe_informs/0`.
+
+## State durability
+
+`Caretaker.ACS.Session` and `Caretaker.ACS.Tasks` are in-memory. On restart,
+queued tasks, presence and learned ConnectionRequestURLs are lost until each CPE
+re-informs. To survive deploys, persist `Tasks.snapshot/0` periodically and pass
+it back as the `:restore` option to `Tasks` start_link; queued tasks are
+re-enqueued to the Session with a fresh TTL on restore. Telemetry for all task
+and queue transitions is documented in `docs/telemetry.md` as a stable contract.

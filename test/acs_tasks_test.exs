@@ -107,6 +107,67 @@ defmodule Caretaker.ACS.TasksTest do
     assert {:ok, ^d} = Tasks.parse_device_id(str)
   end
 
+  test "submit_reboot / submit_download / submit_factory_reset queue correlated tasks" do
+    {:ok, r} = Tasks.submit_reboot(@device)
+    {:ok, d} = Tasks.submit_download(@device, %{url: "http://f/img.bin", file_size: 100})
+    {:ok, f} = Tasks.submit_factory_reset(@device)
+
+    assert {:ok, %{type: :reboot, state: :queued}} = Tasks.get(r)
+    assert {:ok, %{type: :download, state: :queued}} = Tasks.get(d)
+    assert {:ok, %{type: :factory_reset, state: :queued}} = Tasks.get(f)
+
+    # three correlated commands are queued for the device
+    assert {:ok, _, %{id: _}} = Caretaker.ACS.Session.next_command(@dev_key)
+  end
+
+  test "an Inform populates presence (source ip, CR url, wan ip) and the parameter cache" do
+    inform = %Caretaker.TR069.RPC.Inform{
+      device_id: @device,
+      events: ["2 PERIODIC"],
+      max_envelopes: 1,
+      current_time: "",
+      retry_count: 0,
+      source_ip: "203.0.113.7",
+      parameter_list: [
+        %{name: "Device.ManagementServer.ConnectionRequestURL", value: "http://203.0.113.7:7547/cr", type: "xsd:string"},
+        %{name: "Device.ManagementServer.PeriodicInformInterval", value: "300", type: "xsd:unsignedInt"},
+        %{name: "Device.IP.Interface.1.IPv4Address.1.IPAddress", value: "203.0.113.7", type: "xsd:string"},
+        %{name: "Device.DeviceInfo.SoftwareVersion", value: "9.9.9", type: "xsd:string"}
+      ]
+    }
+
+    Caretaker.PubSub.broadcast(Caretaker.PubSub.topic_tr069_inform(), inform)
+
+    assert eventually(fn -> Tasks.presence(@device)["source_ip"] == "203.0.113.7" end)
+
+    presence = Tasks.presence(@device)
+    assert presence["connection_request_url"] == "http://203.0.113.7:7547/cr"
+    assert presence["wan_ip"] == "203.0.113.7"
+    assert presence["inform_interval_seconds"] == 300
+
+    params = Tasks.parameters(@device)
+    assert params["Device.DeviceInfo.SoftwareVersion"]["value"] == "9.9.9"
+    assert params["Device.DeviceInfo.SoftwareVersion"]["updated_at"]
+  end
+
+  test "snapshot/restore rehydrates tasks, presence, params and re-enqueues queued work" do
+    {:ok, task_id} = Tasks.submit_get(@device, ["Device.DeviceInfo."], tag: "keep")
+    # drain the queued command so the restore re-enqueue is observable
+    assert {:ok, _, _} = Session.next_command(@dev_key)
+
+    snap = Tasks.snapshot()
+    assert Map.has_key?(snap.tasks, task_id)
+
+    stop_supervised(Tasks)
+    start_supervised!({Tasks, restore: snap})
+
+    assert {:ok, %{state: :queued, tag: "keep"}} = Tasks.get(task_id)
+    # the CWMP command was re-enqueued to the Session on restore
+    assert {:ok, _, %{id: cwmp_id}} = Session.next_command(@dev_key)
+    {:ok, task} = Tasks.get(task_id)
+    assert cwmp_id == task.cwmp_id
+  end
+
   defp state(task_id) do
     case Tasks.get(task_id) do
       {:ok, t} -> t.state

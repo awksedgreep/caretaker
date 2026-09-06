@@ -76,6 +76,30 @@ defmodule Caretaker.ACS.Tasks do
     GenServer.call(__MODULE__, {:submit, :get, device_id, paths, opts})
   end
 
+  @doc "Queue a Reboot for the device."
+  @spec submit_reboot(device_id(), keyword()) :: {:ok, task_id()} | {:error, term()}
+  def submit_reboot(device_id, opts \\ []) do
+    GenServer.call(__MODULE__, {:submit, :reboot, device_id, %{}, opts})
+  end
+
+  @doc "Queue a firmware Download for the device (`spec` has :url, :file_type, :file_size, ...)."
+  @spec submit_download(device_id(), map(), keyword()) :: {:ok, task_id()} | {:error, term()}
+  def submit_download(device_id, spec, opts \\ []) do
+    GenServer.call(__MODULE__, {:submit, :download, device_id, spec, opts})
+  end
+
+  @doc "Queue a FactoryReset for the device."
+  @spec submit_factory_reset(device_id(), keyword()) :: {:ok, task_id()} | {:error, term()}
+  def submit_factory_reset(device_id, opts \\ []) do
+    GenServer.call(__MODULE__, {:submit, :factory_reset, device_id, %{}, opts})
+  end
+
+  @doc "Latest-known parameter values for a device (from Informs and completed Gets)."
+  @spec parameters(device_id()) :: %{optional(String.t()) => map()}
+  def parameters(device_id) do
+    GenServer.call(__MODULE__, {:parameters, device_id})
+  end
+
   @doc "Fetch a task by id."
   @spec get(task_id()) :: {:ok, map()} | {:error, :not_found}
   def get(task_id) do
@@ -108,9 +132,24 @@ defmodule Caretaker.ACS.Tasks do
   end
 
   @doc "Force a device to check in now, reporting whether the connection request itself succeeded."
-  @spec connection_request(device_id()) :: map()
-  def connection_request(device_id) do
-    GenServer.call(__MODULE__, {:connection_request, device_id})
+  @spec connection_request(device_id(), keyword()) :: map()
+  def connection_request(device_id, opts \\ []) do
+    GenServer.call(__MODULE__, {:connection_request, device_id, opts})
+  end
+
+  @doc """
+  A serializable snapshot of the registry's state (tasks, presence, parameter
+  cache) for optional persistence across restarts.
+
+  Tasks and presence are otherwise ephemeral (in-memory): on a restart they are
+  lost until each device next informs. A consumer that needs to survive deploys
+  can persist `snapshot/0` periodically and pass it back as the `:restore`
+  option to `start_link/1`; queued tasks are re-enqueued to the Session on
+  restore with a fresh TTL.
+  """
+  @spec snapshot() :: %{tasks: map(), presence: map(), params: map()}
+  def snapshot do
+    GenServer.call(__MODULE__, :snapshot)
   end
 
   @doc "Documented throughput limits."
@@ -191,15 +230,60 @@ defmodule Caretaker.ACS.Tasks do
       by_cwmp: %{},
       by_idem: %{},
       presence: %{},
+      params: %{},
       webhook_url: Keyword.get(opts, :webhook_url),
       webhook_secret: Keyword.get(opts, :webhook_secret),
       default_ttl_ms: Keyword.get(opts, :default_ttl_ms, @default_ttl_ms),
       retention_ms: Keyword.get(opts, :retention_ms, @default_retention_ms),
+      connection_request_auth: Keyword.get(opts, :connection_request_auth),
       rate: %{limit: limit, tokens: limit * 1.0, last: now_ms()}
     }
 
+    state = restore(state, Keyword.get(opts, :restore))
+
     Process.send_after(self(), :sweep, @sweep_interval)
     {:ok, state}
+  end
+
+  # Rehydrate from a prior snapshot/0. Presence and the parameter cache are
+  # restored as-is; still-queued tasks are re-enqueued to the Session (whose own
+  # queue is also ephemeral) with a fresh TTL, and the indexes are rebuilt.
+  defp restore(state, nil), do: state
+
+  defp restore(state, %{} = snap) do
+    tasks = Map.get(snap, :tasks, %{})
+
+    base = %{
+      state
+      | presence: Map.get(snap, :presence, %{}),
+        params: Map.get(snap, :params, %{})
+    }
+
+    Enum.reduce(tasks, base, fn {task_id, task}, acc ->
+      task =
+        if task.state == :queued do
+          case build_body(task.type, task.spec) do
+            {:ok, body} ->
+              Session.queue_command(task.device_key, IO.iodata_to_binary(body),
+                ttl_ms: task.ttl_ms,
+                tag: task.tag,
+                id: task.cwmp_id
+              )
+
+              %{task | expires_at_mono: ttl_deadline(task.ttl_ms)}
+
+            _ ->
+              task
+          end
+        else
+          task
+        end
+
+      acc
+      |> put_in([:tasks, task_id], task)
+      |> put_in([:by_cwmp, task.cwmp_id], task_id)
+      |> maybe_index_idem(task.idempotency_key, task_id)
+    end)
   end
 
   @impl true
@@ -298,6 +382,24 @@ defmodule Caretaker.ACS.Tasks do
   end
 
   @impl true
+  def handle_call({:parameters, device_id}, _from, state) do
+    reply =
+      case normalize_device_id(device_id) do
+        {:ok, d} ->
+          state.params
+          |> Map.get(device_key(d), %{})
+          |> Map.new(fn {name, %{value: v, updated_at: ts}} ->
+            {name, %{"value" => v, "updated_at" => iso(ts)}}
+          end)
+
+        _ ->
+          %{}
+      end
+
+    {:reply, reply, state}
+  end
+
+  @impl true
   def handle_call({:presence, device_id}, _from, state) do
     {:reply, presence_for(state, device_id), state}
   end
@@ -308,8 +410,13 @@ defmodule Caretaker.ACS.Tasks do
   end
 
   @impl true
-  def handle_call({:connection_request, device_id}, _from, state) do
-    {:reply, do_connection_request(device_id), state}
+  def handle_call({:connection_request, device_id, opts}, _from, state) do
+    {:reply, do_connection_request(device_id, opts, state), state}
+  end
+
+  @impl true
+  def handle_call(:snapshot, _from, state) do
+    {:reply, %{tasks: state.tasks, presence: state.presence, params: state.params}, state}
   end
 
   @impl true
@@ -346,6 +453,7 @@ defmodule Caretaker.ACS.Tasks do
          s
        else
          result = if task.type == :get, do: %{"parameters" => normalize_result(data)}, else: nil
+         s = if task.type == :get, do: cache_params(s, task.device_key, data[:parameters]), else: s
          transition(s, %{task | result: result}, :applied)
        end
      end)}
@@ -370,10 +478,15 @@ defmodule Caretaker.ACS.Tasks do
     entry = %{
       last_inform: DateTime.utc_now(),
       inform_interval: inform_interval(inform),
-      device_id: Map.take(inform.device_id, [:oui, :product_class, :serial_number])
+      device_id: Map.take(inform.device_id, [:oui, :product_class, :serial_number]),
+      source_ip: Map.get(inform, :source_ip),
+      connection_request_url: param_value(inform, "Device.ManagementServer.ConnectionRequestURL"),
+      wan_ip: wan_ip(inform)
     }
 
-    {:noreply, put_in(state, [:presence, dev_key], entry)}
+    state = put_in(state, [:presence, dev_key], entry)
+    state = cache_params(state, dev_key, inform.parameter_list)
+    {:noreply, state}
   end
 
   @impl true
@@ -451,7 +564,48 @@ defmodule Caretaker.ACS.Tasks do
     end
   end
 
+  defp build_body(:reboot, _spec) do
+    Caretaker.TR069.RPC.Reboot.encode(
+      Caretaker.TR069.RPC.Reboot.new(command_key: gen_command_key())
+    )
+  end
+
+  defp build_body(:factory_reset, _spec) do
+    Caretaker.TR069.RPC.FactoryReset.encode(Caretaker.TR069.RPC.FactoryReset.new())
+  end
+
+  defp build_body(:download, spec) do
+    with {:ok, url} <- fetch_any(spec, [:url, "url"]) do
+      download =
+        Caretaker.TR069.RPC.Download.new(
+          command_key: spec[:command_key] || spec["command_key"] || gen_command_key(),
+          file_type: spec[:file_type] || spec["file_type"] || "1 Firmware Upgrade Image",
+          url: url,
+          username: spec[:username] || spec["username"],
+          password: spec[:password] || spec["password"],
+          file_size: to_int(spec[:file_size] || spec["file_size"] || 0),
+          target_file_name: spec[:target_file_name] || spec["target_file_name"],
+          delay_seconds: to_int(spec[:delay_seconds] || spec["delay_seconds"] || 0)
+        )
+
+      Caretaker.TR069.RPC.Download.encode(download)
+    else
+      _ -> {:error, :invalid_download}
+    end
+  end
+
   defp build_body(_, _), do: {:error, :invalid_parameters}
+
+  defp to_int(v) when is_integer(v), do: v
+  defp to_int(v) when is_binary(v) do
+    case Integer.parse(v) do
+      {i, _} -> i
+      _ -> 0
+    end
+  end
+  defp to_int(_), do: 0
+
+  defp gen_command_key, do: "caretaker-" <> Base.encode16(:crypto.strong_rand_bytes(4), case: :lower)
 
   defp normalize_set_params([]), do: {:error, :no_parameters}
 
@@ -545,6 +699,24 @@ defmodule Caretaker.ACS.Tasks do
 
   defp normalize_result(_), do: %{}
 
+  # Merge reported parameter values into the per-device latest-known cache.
+  defp cache_params(state, _dev_key, params) when params in [nil, []], do: state
+
+  defp cache_params(state, dev_key, params) when is_list(params) do
+    now = DateTime.utc_now()
+
+    updates =
+      Enum.reduce(params, %{}, fn
+        %{name: n, value: v}, acc when is_binary(n) -> Map.put(acc, n, %{value: v, updated_at: now})
+        {n, v}, acc when is_binary(n) -> Map.put(acc, n, %{value: v, updated_at: now})
+        _, acc -> acc
+      end)
+
+    update_in(state, [:params, Access.key(dev_key, %{})], &Map.merge(&1, updates))
+  end
+
+  defp cache_params(state, _dev_key, _params), do: state
+
   # -- presence --
 
   defp presence_for(state, device_id) do
@@ -557,7 +729,10 @@ defmodule Caretaker.ACS.Tasks do
             "device_id" => device_id_string(device_id),
             "last_inform" => nil,
             "inform_interval_seconds" => nil,
-            "reachable" => false
+            "reachable" => false,
+            "source_ip" => nil,
+            "connection_request_url" => nil,
+            "wan_ip" => nil
           }
 
         p ->
@@ -565,7 +740,10 @@ defmodule Caretaker.ACS.Tasks do
             "device_id" => device_id_string(device_id),
             "last_inform" => iso(p.last_inform),
             "inform_interval_seconds" => p.inform_interval,
-            "reachable" => reachable?(p)
+            "reachable" => reachable?(p),
+            "source_ip" => Map.get(p, :source_ip),
+            "connection_request_url" => Map.get(p, :connection_request_url),
+            "wan_ip" => Map.get(p, :wan_ip)
           }
       end
     else
@@ -579,6 +757,28 @@ defmodule Caretaker.ACS.Tasks do
   defp reachable?(%{last_inform: last, inform_interval: interval}) do
     window = (interval || 3600) * 2
     DateTime.diff(DateTime.utc_now(), last, :second) <= window
+  end
+
+  # Read a single parameter value from an Inform's parameter list.
+  defp param_value(%Caretaker.TR069.RPC.Inform{parameter_list: params}, name) when is_list(params) do
+    Enum.find_value(params, fn
+      %{name: ^name, value: v} -> v
+      {^name, v} -> v
+      _ -> nil
+    end)
+  end
+
+  defp param_value(_, _), do: nil
+
+  # Best-effort WAN IPv4 from common TR-181 paths, if the Inform reported one.
+  defp wan_ip(inform) do
+    Enum.find_value(
+      [
+        "Device.IP.Interface.1.IPv4Address.1.IPAddress",
+        "Device.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress"
+      ],
+      fn path -> param_value(inform, path) end
+    )
   end
 
   defp inform_interval(%Caretaker.TR069.RPC.Inform{parameter_list: params}) when is_list(params) do
@@ -604,25 +804,12 @@ defmodule Caretaker.ACS.Tasks do
 
   # -- connection request (CR-6) --
 
-  defp do_connection_request(device_id) do
+  defp do_connection_request(device_id, opts, state) do
     with {:ok, device_id} <- normalize_device_id(device_id),
-         {:ok, url} <- connection_request_url(device_id) do
+         {:ok, url} <- connection_request_url(device_id, state) do
       :ok = HTTP.ensure_finch()
-      req = Finch.build(:get, url)
-
-      case Finch.request(req, HTTP.finch(), receive_timeout: 5_000) do
-        {:ok, %Finch.Response{status: status}} when status in 200..299 ->
-          %{"requested" => true, "session_established" => true}
-
-        {:ok, %Finch.Response{status: 401}} ->
-          %{"requested" => true, "session_established" => false, "reason" => "auth_required"}
-
-        {:ok, %Finch.Response{status: status}} ->
-          %{"requested" => true, "session_established" => false, "reason" => "http_#{status}"}
-
-        {:error, reason} ->
-          %{"requested" => false, "session_established" => false, "reason" => inspect(reason)}
-      end
+      creds = connection_request_creds(opts, state)
+      request_connection(url, creds)
     else
       {:error, :no_connection_request_url} ->
         %{"requested" => false, "session_established" => false, "reason" => "no_connection_request_url"}
@@ -632,14 +819,127 @@ defmodule Caretaker.ACS.Tasks do
     end
   end
 
-  defp connection_request_url(device_id) do
-    with pid when not is_nil(pid) <- Process.whereis(Caretaker.TR181.Store),
-         model when is_map(model) <- Caretaker.TR181.Store.get(device_key(device_id)),
-         url when is_binary(url) and url != "" <-
-           get_in(model, ["Device", "ManagementServer", "ConnectionRequestURL"]) do
-      {:ok, url}
+  # Perform the connection-request GET, answering a Basic/Digest 401 challenge
+  # with the configured credentials (real CPEs protect the CR URL with digest).
+  defp request_connection(url, creds) do
+    path = request_path(url)
+    preemptive = if creds, do: preemptive_basic(creds), else: []
+
+    case get(url, preemptive) do
+      {:ok, status} when status in 200..299 ->
+        %{"requested" => true, "session_established" => true}
+
+      {:ok, 401} when creds != nil ->
+        answer_challenge(url, path, creds)
+
+      {:ok, 401} ->
+        %{"requested" => true, "session_established" => false, "reason" => "auth_required"}
+
+      {:ok, status} ->
+        %{"requested" => true, "session_established" => false, "reason" => "http_#{status}"}
+
+      {:error, reason} ->
+        %{"requested" => false, "session_established" => false, "reason" => inspect(reason)}
+    end
+  end
+
+  defp answer_challenge(url, path, creds) do
+    with {:ok, 401, challenge} when is_binary(challenge) <- get_with_challenge(url),
+         auth when is_binary(auth) <-
+           Caretaker.HTTP.Auth.authorization(challenge, creds, :get, path) do
+      case get(url, [{"authorization", auth}]) do
+        {:ok, status} when status in 200..299 ->
+          %{"requested" => true, "session_established" => true}
+
+        {:ok, status} ->
+          %{"requested" => true, "session_established" => false, "reason" => "http_#{status}"}
+
+        {:error, reason} ->
+          %{"requested" => false, "session_established" => false, "reason" => inspect(reason)}
+      end
     else
-      _ -> {:error, :no_connection_request_url}
+      _ ->
+        %{"requested" => true, "session_established" => false, "reason" => "auth_failed"}
+    end
+  end
+
+  defp get(url, headers) do
+    req = Finch.build(:get, url, headers)
+
+    case Finch.request(req, HTTP.finch(), receive_timeout: 5_000) do
+      {:ok, %Finch.Response{status: status}} -> {:ok, status}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp get_with_challenge(url) do
+    req = Finch.build(:get, url)
+
+    case Finch.request(req, HTTP.finch(), receive_timeout: 5_000) do
+      {:ok, %Finch.Response{status: 401, headers: headers}} ->
+        challenge =
+          Enum.find_value(headers, fn {k, v} ->
+            if String.downcase(k) == "www-authenticate", do: v
+          end)
+
+        {:ok, 401, challenge}
+
+      {:ok, %Finch.Response{status: status}} ->
+        {:ok, status, nil}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp preemptive_basic(%{scheme: :basic, username: u, password: p}),
+    do: [{"authorization", Caretaker.HTTP.Auth.basic(u, p)}]
+
+  defp preemptive_basic(_), do: []
+
+  defp request_path(url) do
+    case URI.parse(url) do
+      %URI{path: nil} -> "/"
+      %URI{path: p, query: nil} -> p
+      %URI{path: p, query: q} -> p <> "?" <> q
+    end
+  end
+
+  # Per-call credentials override the ACS-wide default configured at start_link.
+  defp connection_request_creds(opts, state) do
+    case {Keyword.get(opts, :username), Keyword.get(opts, :password)} do
+      {u, p} when is_binary(u) ->
+        %{username: u, password: p || "", scheme: scheme(Keyword.get(opts, :scheme))}
+
+      _ ->
+        state.connection_request_auth
+    end
+  end
+
+  defp scheme(:basic), do: :basic
+  defp scheme(_), do: :digest
+
+  # Prefer the CR URL learned from the most recent Inform, then the TR-181 store.
+  defp connection_request_url(device_id, state) do
+    dev_key = device_key(device_id)
+
+    from_presence =
+      case state.presence[dev_key] do
+        %{connection_request_url: url} when is_binary(url) and url != "" -> url
+        _ -> nil
+      end
+
+    url = from_presence || connection_request_url_from_store(dev_key)
+
+    if is_binary(url) and url != "", do: {:ok, url}, else: {:error, :no_connection_request_url}
+  end
+
+  defp connection_request_url_from_store(dev_key) do
+    with pid when not is_nil(pid) <- Process.whereis(Caretaker.TR181.Store),
+         model when is_map(model) <- Caretaker.TR181.Store.get(dev_key) do
+      get_in(model, ["Device", "ManagementServer", "ConnectionRequestURL"])
+    else
+      _ -> nil
     end
   end
 

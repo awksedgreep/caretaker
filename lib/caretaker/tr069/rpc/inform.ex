@@ -11,9 +11,18 @@ defmodule Caretaker.TR069.RPC.Inform do
              :max_envelopes,
              :current_time,
              :retry_count,
-             :parameter_list
+             :parameter_list,
+             :source_ip
            ]}
-  defstruct [:device_id, :events, :max_envelopes, :current_time, :retry_count, parameter_list: []]
+  defstruct [
+    :device_id,
+    :events,
+    :max_envelopes,
+    :current_time,
+    :retry_count,
+    :source_ip,
+    parameter_list: []
+  ]
 
   @type device_id :: %{
           manufacturer: String.t(),
@@ -28,7 +37,8 @@ defmodule Caretaker.TR069.RPC.Inform do
           max_envelopes: pos_integer(),
           current_time: NaiveDateTime.t() | DateTime.t() | String.t(),
           retry_count: non_neg_integer(),
-          parameter_list: list()
+          parameter_list: list(),
+          source_ip: String.t() | nil
         }
 
   @spec new(keyword()) :: t()
@@ -197,7 +207,8 @@ defmodule Caretaker.TR069.RPC.Inform do
       max_envelopes: i.max_envelopes,
       current_time: to_iso8601(i.current_time),
       retry_count: i.retry_count,
-      parameter_list: i.parameter_list
+      parameter_list: i.parameter_list,
+      source_ip: i.source_ip
     }
   end
 
