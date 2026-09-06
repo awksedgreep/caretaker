@@ -481,3 +481,20 @@ All phases complete. Caretaker now provides full TR-369 (USP) support:
 Future enhancements (not blocking release):
 - Test mixed TR-069/TR-369 scenarios
 - Performance testing with fleet
+
+## USP-over-MQTT broker
+
+USP-over-MQTT is broker-mediated. Caretaker ships an **embedded broker** as the
+default, so no external infrastructure is needed:
+
+```elixir
+children = [
+  Caretaker.USP.Transport.MQTT.Broker,   # embedded broker on localhost:1883 (default)
+  # controller + agent MQTT transports default to localhost:1883
+]
+```
+
+To use an **external** broker (EMQX, Mosquitto, HiveMQ, a shared bus, or for
+clustering/HA), omit the broker and point the transports at it via
+`broker_host:` / `broker_port:`. USP-over-WebSocket needs no broker at all — the
+controller's WebSocket server is the endpoint agents connect to.

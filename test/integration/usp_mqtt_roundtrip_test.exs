@@ -9,67 +9,10 @@ defmodule Caretaker.USP.MQTT.RoundtripTest do
 
   alias Caretaker.USP.Transport.MQTT
 
-  # A minimal but real relay broker. mqttx supplies the protocol, transport and
-  # a topic Router, but the fan-out is the handler's job: track subscriptions in
-  # a shared Router (an Agent, since callbacks run in per-connection processes)
-  # and, on publish, tell each matching subscriber connection to emit the
-  # message (its handle_info returns {:publish, ...}).
-  defmodule Broker do
-    use MqttX.Server
-    alias MqttX.Server.Router
-
-    @impl true
-    def init(opts), do: %{router: Keyword.fetch!(opts, :router)}
-
-    @impl true
-    def handle_connect(_client_id, _credentials, state), do: {:ok, state}
-
-    @impl true
-    def handle_subscribe(topics, %{router: agent} = state) do
-      conn = self()
-
-      granted =
-        Enum.map(topics, fn t ->
-          filter = topic_filter(t)
-          Agent.update(agent, fn r -> Router.subscribe(r, filter, conn, qos: 1) end)
-          1
-        end)
-
-      {:ok, granted, state}
-    end
-
-    @impl true
-    def handle_publish(topic, payload, _opts, %{router: agent} = state) do
-      agent
-      |> Agent.get(fn r -> Router.match(r, topic) end)
-      |> Enum.each(fn {conn, _opts} -> send(conn, {:deliver, topic, payload}) end)
-
-      {:ok, state}
-    end
-
-    @impl true
-    def handle_info({:deliver, topic, payload}, state), do: {:publish, topic, payload, state}
-    def handle_info(_msg, state), do: {:ok, state}
-
-    @impl true
-    def handle_disconnect(_reason, _state), do: :ok
-
-    defp topic_filter(%{topic: f}), do: topic_filter(f)
-    defp topic_filter(f) when is_binary(f), do: f
-    defp topic_filter(f) when is_list(f), do: MqttX.Topic.flatten(f)
-  end
-
   setup do
     port = 1900 + rem(System.unique_integer([:positive]), 2000)
-
-    {:ok, router} = Agent.start_link(fn -> MqttX.Server.Router.new() end)
-    {:ok, broker} = MqttX.Server.start_link(Broker, [router: router], port: port)
-
-    on_exit(fn ->
-      if Process.alive?(broker), do: Process.exit(broker, :normal)
-      if Process.alive?(router), do: Agent.stop(router)
-    end)
-
+    # Dogfood the embedded broker that ships as the default for USP-over-MQTT.
+    start_supervised!({Caretaker.USP.Transport.MQTT.Broker, port: port})
     %{port: port}
   end
 
