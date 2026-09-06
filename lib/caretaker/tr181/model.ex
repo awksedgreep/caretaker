@@ -120,6 +120,8 @@ defmodule Caretaker.TR181.Model do
     do_put_path(acc, segments, value)
   end
 
+  # An empty path (e.g. a ParameterValueStruct with no Name) is ignored
+  defp do_put_path(acc, [], _value), do: acc
   defp do_put_path(acc, [last], value), do: Map.put(acc, last, value)
 
   defp do_put_path(acc, [seg | rest], value) do

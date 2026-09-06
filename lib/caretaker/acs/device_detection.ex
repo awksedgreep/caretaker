@@ -40,7 +40,7 @@ defmodule Caretaker.ACS.DeviceDetection do
         }
 
   # Known OUIs for device vendors
-  @mikrotik_ouis ["D4CA6D", "2CC81B", "E48D8C", "6C3B6B", "4C5E0C", "00:0C:42"]
+  @mikrotik_ouis ["D4CA6D", "2CC81B", "E48D8C", "6C3B6B", "4C5E0C", "000C42"]
 
   @huawei_ouis ["00E0FC", "ECE309", "5C5476", "48F317", "007B72"]
 
@@ -214,10 +214,11 @@ defmodule Caretaker.ACS.DeviceDetection do
 
   # Helper to extract parameter value from parameter list
   defp get_param_value(param_list, name) when is_list(param_list) do
-    case Enum.find(param_list, fn {pname, _value} -> pname == name end) do
-      {_name, value} -> value
-      nil -> nil
-    end
+    Enum.find_value(param_list, fn
+      %{name: ^name, value: value} -> value
+      {^name, value} -> value
+      _ -> nil
+    end)
   end
 
   defp get_param_value(_, _), do: nil

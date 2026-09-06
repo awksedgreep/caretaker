@@ -144,7 +144,7 @@ defmodule Caretaker.CPE.DeviceState do
   @spec to_parameter_list(Agent.agent()) :: [map()]
   def to_parameter_list(agent) do
     Agent.get(agent, fn state ->
-      flatten_params(state.params)
+      flatten_params(state.params, "")
     end)
   end
 
@@ -156,8 +156,19 @@ defmodule Caretaker.CPE.DeviceState do
   @spec get_parameters(Agent.agent(), path()) :: [map()]
   def get_parameters(agent, path) when is_binary(path) do
     Agent.get(agent, fn state ->
-      tree = get_tree_by_path(state.params, path)
-      flatten_params(tree, path)
+      clean_path = String.trim_trailing(path, ".")
+
+      case clean_path do
+        "" ->
+          flatten_params(state.params, "")
+
+        _ ->
+          case get_by_path(state.params, clean_path) do
+            nil -> []
+            %{} = tree -> flatten_params(tree, clean_path <> ".")
+            scalar -> [param_entry(clean_path, scalar)]
+          end
+      end
     end)
   end
 
@@ -273,8 +284,13 @@ defmodule Caretaker.CPE.DeviceState do
         ]
   def get_parameter_names(agent, path, next_level \\ false) do
     Agent.get(agent, fn state ->
-      tree = get_tree_by_path(state.params, path)
-      collect_parameter_names(tree, path, next_level)
+      clean_path = String.trim_trailing(path, ".")
+
+      case get_tree_by_path(state.params, path) do
+        %{} = tree -> collect_parameter_names(tree, path, next_level)
+        nil -> []
+        _scalar -> [%{name: clean_path, writable: true}]
+      end
     end)
   end
 
@@ -293,7 +309,7 @@ defmodule Caretaker.CPE.DeviceState do
         # Expand path to include all parameters under it if path ends with "."
         param_paths =
           if String.ends_with?(path, ".") do
-            tree = get_tree_by_path(state.params, path)
+            tree = get_tree_by_path(state.params, path) || %{}
 
             flatten_names(tree, String.trim_trailing(path, "."))
             |> Enum.map(& &1.name)
@@ -347,9 +363,7 @@ defmodule Caretaker.CPE.DeviceState do
     Agent.get_and_update(agent, fn state ->
       clean_path = String.trim_trailing(object_path, ".")
 
-      # Get current instance number for this path, default to 0
-      current = Map.get(state.instance_numbers, clean_path, 0)
-      new_instance = current + 1
+      new_instance = next_instance_number(state, clean_path)
 
       # Create the instance path (e.g., "Device.IP.Interface.1")
       instance_path = "#{clean_path}.#{new_instance}"
@@ -418,9 +432,31 @@ defmodule Caretaker.CPE.DeviceState do
   @spec get_next_instance_number(Agent.agent(), String.t()) :: integer()
   def get_next_instance_number(agent, object_path) do
     Agent.get(agent, fn state ->
-      clean_path = String.trim_trailing(object_path, ".")
-      Map.get(state.instance_numbers, clean_path, 0) + 1
+      next_instance_number(state, String.trim_trailing(object_path, "."))
     end)
+  end
+
+  # One past both the allocation counter and any instance already present in
+  # the tree (e.g. loaded from a profile), so Add never overwrites an instance.
+  defp next_instance_number(state, clean_path) do
+    existing_max =
+      case get_by_path(state.params, clean_path) do
+        %{} = obj ->
+          obj
+          |> Map.keys()
+          |> Enum.flat_map(fn k ->
+            case Integer.parse(k) do
+              {i, ""} -> [i]
+              _ -> []
+            end
+          end)
+          |> Enum.max(fn -> 0 end)
+
+        _ ->
+          0
+      end
+
+    max(Map.get(state.instance_numbers, clean_path, 0), existing_max) + 1
   end
 
   # Private helpers
@@ -442,35 +478,36 @@ defmodule Caretaker.CPE.DeviceState do
     Map.put(params, key, put_in_nested(current, rest, value))
   end
 
+  # Returns the subtree at `path` (a map), nil when absent, or the scalar
+  # value when `path` names a leaf parameter.
   defp get_tree_by_path(params, path) do
-    # Remove trailing dot if present
-    clean_path = String.trim_trailing(path, ".")
-
-    case clean_path do
+    case String.trim_trailing(path, ".") do
       "" -> params
-      _ -> get_by_path(params, clean_path) || %{}
+      clean_path -> get_by_path(params, clean_path)
     end
   end
 
-  defp flatten_params(params, prefix \\ "") do
+  # Objects (maps, including empty instances) contribute their leaf
+  # parameters; scalars become one ParameterValueStruct entry.
+  defp flatten_params(params, prefix) when is_map(params) do
     Enum.flat_map(params, fn {key, value} ->
-      full_key = if prefix == "", do: key, else: "#{prefix}#{key}"
+      full_key = prefix <> key
 
       case value do
-        %{} = nested when map_size(nested) > 0 ->
-          flatten_params(nested, "#{full_key}.")
-
-        scalar ->
-          [
-            %{
-              name: full_key,
-              value: to_string(scalar),
-              type: infer_type(scalar)
-            }
-          ]
+        %{} = nested -> flatten_params(nested, full_key <> ".")
+        scalar -> [param_entry(full_key, scalar)]
       end
     end)
   end
+
+  defp param_entry(name, value) do
+    %{name: name, value: stringify(value), type: infer_type(value)}
+  end
+
+  # Profile JSON may contain arrays; TR-181 lists are comma-separated strings.
+  defp stringify(nil), do: ""
+  defp stringify(list) when is_list(list), do: Enum.map_join(list, ",", &stringify/1)
+  defp stringify(value), do: to_string(value)
 
   defp infer_type(value) when is_integer(value), do: "xsd:int"
   defp infer_type(value) when is_boolean(value), do: "xsd:boolean"
@@ -494,8 +531,6 @@ defmodule Caretaker.CPE.DeviceState do
       flatten_names(params, clean_prefix)
     end
   end
-
-  defp collect_parameter_names(_params, _prefix, _next_level), do: []
 
   defp flatten_names(params, prefix) when is_map(params) do
     Enum.flat_map(params, fn {key, value} ->
