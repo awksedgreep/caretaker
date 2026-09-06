@@ -112,8 +112,9 @@ defmodule Caretaker.CPE.Simulation.RouterResources do
         :exhausted -> 0.05
       end
 
-    # Scale the noise with the profile so :exhausted stays exhausted
-    variation = :rand.normal() * base_free_pct * 0.2
+    # Noise proportional to the profile's baseline: matches the previous ~0.05
+    # spread at :normal while keeping :exhausted reliably near its floor.
+    variation = :rand.normal() * base_free_pct * 0.1
     free_pct = max(0.01, min(0.95, base_free_pct + variation))
     free = round(total * free_pct)
 

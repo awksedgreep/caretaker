@@ -12,7 +12,7 @@ defmodule Caretaker.Integration.FleetSessionTest do
     port = 4000 + rem(System.unique_integer([:positive]), 1000)
     start_supervised!(Caretaker.PubSub)
     start_supervised!(Caretaker.ACS.Session)
-    start_supervised!({Finch, name: Caretaker.Finch})
+    _ = start_supervised({Finch, name: Caretaker.Finch})
     start_supervised!({Bandit, plug: Caretaker.ACS.Server, port: port})
     %{acs_url: "http://localhost:#{port}/cwmp"}
   end
