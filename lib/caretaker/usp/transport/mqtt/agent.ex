@@ -32,6 +32,7 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
           agent_id: String.t(),
           controller_id: String.t(),
           client_id: String.t(),
+          client: pid() | nil,
           broker_host: String.t(),
           broker_port: non_neg_integer(),
           connected: boolean()
@@ -103,6 +104,7 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
       agent_id: agent_id,
       controller_id: controller_id,
       client_id: client_id,
+      client: nil,
       broker_host: broker_host,
       broker_port: broker_port,
       connected: false
@@ -146,13 +148,13 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   end
 
   @impl true
-  def handle_info({:tortoise, :connected}, state) do
+  def handle_info({:mqtt_status, :connected}, state) do
     Logger.debug("USP Agent MQTT connected")
     {:noreply, %{state | connected: true}}
   end
 
   @impl true
-  def handle_info({:tortoise, :disconnected}, state) do
+  def handle_info({:mqtt_status, :disconnected}, state) do
     Logger.debug("USP Agent MQTT disconnected")
     Telemetry.emit_transport_disconnect(:mqtt, state.agent_id)
     # Attempt to reconnect
@@ -201,8 +203,8 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
 
   @impl true
   def handle_call(:disconnect, _from, state) do
-    Tortoise311.Connection.disconnect(state.client_id)
-    {:reply, :ok, %{state | connected: false}}
+    if state.client, do: MqttX.Client.disconnect(state.client)
+    {:reply, :ok, %{state | connected: false, client: nil}}
   end
 
   # ============================================================================
@@ -212,19 +214,21 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   defp connect_to_broker(state) do
     subscribe_topic = Topics.agent_request(state.agent_id)
 
-    tortoise_opts = [
+    connect_opts = [
       client_id: state.client_id,
-      handler: {Caretaker.USP.Transport.MQTT.Handler, [parent: self()]},
-      server: {Tortoise311.Transport.Tcp, host: state.broker_host, port: state.broker_port},
-      subscriptions: [{subscribe_topic, 1}]
+      host: state.broker_host,
+      port: state.broker_port,
+      clean_session: true,
+      await_connect: true,
+      handler: Caretaker.USP.Transport.MQTT.Handler,
+      handler_state: %{parent: self()}
     ]
 
-    case Tortoise311.Connection.start_link(tortoise_opts) do
-      {:ok, _pid} ->
-        {:ok, %{state | connected: true}}
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, client} <- MqttX.Client.connect(connect_opts),
+         {:ok, _granted} <- MqttX.Client.subscribe(client, subscribe_topic, qos: 1) do
+      {:ok, %{state | client: client, connected: true}}
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -268,9 +272,9 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   defp publish(topic, record, state) do
     case Record.encode(record) do
       {:ok, payload} ->
-        case Tortoise311.publish(state.client_id, topic, payload, qos: 1) do
+        case MqttX.Client.publish(state.client, topic, payload, qos: 1) do
           :ok -> :ok
-          {:ok, _ref} -> :ok
+          {:ok, _} -> :ok
           {:error, reason} -> {:error, reason}
         end
 

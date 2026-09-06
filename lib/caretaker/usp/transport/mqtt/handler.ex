@@ -1,65 +1,36 @@
 defmodule Caretaker.USP.Transport.MQTT.Handler do
   @moduledoc """
-  Tortoise MQTT handler for USP transport.
+  mqttx client handler for USP transport.
 
-  This module implements the Tortoise311.Handler behaviour and forwards
-  MQTT events to the parent process (Agent or Controller transport).
+  mqttx clients deliver events through `handle_mqtt_event/3` (running in the
+  client's connection process). This handler forwards them to the owning
+  transport process (`:parent` in the handler state) as plain messages:
+
+    - `{:mqtt, topic, payload}` for an incoming PUBLISH
+    - `{:mqtt_status, :connected}` / `{:mqtt_status, :disconnected}`
+
+  so the Agent/Controller transports can drive their own lifecycle.
   """
 
-  use Tortoise311.Handler
-  require Logger
 
-  defstruct [:parent]
+  @type state :: %{parent: pid()}
 
-  @impl true
-  def init(opts) do
-    parent = Keyword.fetch!(opts, :parent)
-    {:ok, %__MODULE__{parent: parent}}
+  @doc "mqttx client event callback."
+  @spec handle_mqtt_event(atom(), term(), state()) :: state()
+  def handle_mqtt_event(:message, {topic, payload, _packet}, %{parent: parent} = state) do
+    send(parent, {:mqtt, topic, payload})
+    state
   end
 
-  @impl true
-  def connection(status, state) do
-    case status do
-      :up ->
-        send(state.parent, {:tortoise, :connected})
-
-      :down ->
-        send(state.parent, {:tortoise, :disconnected})
-
-      :terminating ->
-        send(state.parent, {:tortoise, :terminating})
-    end
-
-    {:ok, state}
+  def handle_mqtt_event(:connected, _data, %{parent: parent} = state) do
+    send(parent, {:mqtt_status, :connected})
+    state
   end
 
-  @impl true
-  def subscription(status, topic, state) do
-    case status do
-      :up ->
-        Logger.debug("USP MQTT subscribed to: #{topic}")
-
-      :down ->
-        Logger.debug("USP MQTT unsubscribed from: #{topic}")
-
-      {:warn, reason} ->
-        Logger.warning("USP MQTT subscription warning on #{topic}: #{inspect(reason)}")
-
-      {:error, reason} ->
-        Logger.error("USP MQTT subscription error on #{topic}: #{inspect(reason)}")
-    end
-
-    {:ok, state}
+  def handle_mqtt_event(:disconnected, _reason, %{parent: parent} = state) do
+    send(parent, {:mqtt_status, :disconnected})
+    state
   end
 
-  @impl true
-  def handle_message(topic, payload, state) do
-    send(state.parent, {:mqtt, topic, payload})
-    {:ok, state}
-  end
-
-  @impl true
-  def terminate(_reason, _state) do
-    :ok
-  end
+  def handle_mqtt_event(_event, _data, state), do: state
 end

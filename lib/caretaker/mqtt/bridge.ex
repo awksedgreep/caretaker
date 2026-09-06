@@ -29,7 +29,7 @@ defmodule Caretaker.MQTT.Bridge do
   def init(opts) do
     topic = Keyword.get(opts, :topic, "caretaker/inform")
     client_id = Keyword.fetch!(opts, :client_id)
-    client_mod = Keyword.get(opts, :client_module, Caretaker.MQTT.TortoiseClient)
+    client_mod = Keyword.get(opts, :client_module, Caretaker.MQTT.MqttxClient)
 
     PubSub.subscribe(PubSub.topic_tr069_inform())
 

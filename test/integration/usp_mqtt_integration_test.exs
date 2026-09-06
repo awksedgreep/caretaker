@@ -4,7 +4,7 @@ defmodule Caretaker.USP.MQTT.IntegrationTest do
 
   These tests verify the MQTT transport layer components work correctly.
   Full end-to-end MQTT tests require an external MQTT broker (e.g., Mosquitto)
-  due to protocol compatibility issues between Nipper and Tortoise311.
+  A live publish/subscribe round-trip against the mqttx broker lives in the
   """
 
   use ExUnit.Case, async: true
@@ -178,12 +178,11 @@ defmodule Caretaker.USP.MQTT.IntegrationTest do
       assert {:send_message, 3} in exports
     end
 
-    test "Handler module implements Tortoise311.Handler behaviour" do
+    test "Handler module implements the mqttx client event callback" do
       alias Caretaker.USP.Transport.MQTT.Handler
 
-      # Check that the module uses the Handler behaviour
-      behaviours = Handler.__info__(:attributes)[:behaviour] || []
-      assert Tortoise311.Handler in behaviours
+      # mqttx clients deliver events via handle_mqtt_event/3 (duck-typed).
+      assert {:handle_mqtt_event, 3} in Handler.__info__(:functions)
     end
   end
 end

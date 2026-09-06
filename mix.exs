@@ -44,13 +44,11 @@ defmodule Caretaker.MixProject do
       {:websock_adapter, "~> 0.5"},
       {:telemetry, "~> 1.2"},
       {:jason, "~> 1.4"},
-      {:tortoise311, "~> 0.12"},
       {:finch, "~> 0.20"},
       {:protobuf, "~> 0.13"},
       {:mint_web_socket, "~> 1.0"},
-      # Test-only embedded MQTT broker for the USP-over-MQTT transport tests.
-      # Not forced on library consumers. See #38 (migration to mqttx).
-      {:nipper, "~> 0.1.0", only: [:dev, :test]},
+      # MQTT 5.0 client + broker (USP-over-MQTT transport; broker used in tests).
+      {:mqttx, "~> 0.11"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
