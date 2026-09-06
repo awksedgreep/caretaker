@@ -2,8 +2,7 @@ import Config
 
 config :logger, level: :info
 
-# Nipper MQTT broker configuration for testing
-config :nipper,
-  listeners: [
-    default: [port: 1883, name: :mqtt]
-  ]
+# Per-environment configuration (test env configures the embedded MQTT broker).
+if File.exists?(Path.join(__DIR__, "#{config_env()}.exs")) do
+  import_config "#{config_env()}.exs"
+end

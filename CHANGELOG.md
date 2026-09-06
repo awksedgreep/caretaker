@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.0
+
+### Added
+- Northbound HTTP task API for external change agents (`Caretaker.ACS.Tasks`,
+  `Caretaker.ACS.API`): submit set/get, task status, per-task and bulk-by-tag
+  cancellation, task TTL, idempotency keys, device presence, connection
+  requests, terminal-state webhooks, documented rate limits, and batch
+  submission. See `docs/task_api.md`.
+- `Caretaker.ACS.Session`: command TTL/expiry and tag/id-based cancellation.
+- `Caretaker.HTTP` shared Finch pool and `Caretaker.HTTP.Auth` (Basic/Digest);
+  the CPE client now echoes cookies and answers auth challenges.
+
+### Changed
+- Adopted lather 1.1 (repeated-sibling XML builder semantics); pinned `~> 1.1`.
+- ACS answers a CPE RPC response by sending the next queued RPC (TR-069
+  session flow), and returns CWMP SOAP Faults on errors.
+- Dependencies upgraded to clear HTTP-stack security advisories.
+- `nipper` is now a test-only dependency; its broker config moved to
+  `config/test.exs` (migration to the mqttx broker tracked in #38).
+- String parameter values are typed `xsd:string` rather than guessed numeric.
+
+### Fixed
+- Correctness and crash fixes across the ACS, CPE client, TR-069 codecs, USP
+  agent/controller/transports, simulation, and fleet (see closed issues #1–#32).
+
 ## v0.2.0
 
 ### Added
