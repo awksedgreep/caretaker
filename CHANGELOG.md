@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+- MQTT consolidated on `mqttx` (client + broker); `nipper` and `tortoise311`
+  dropped. New live USP-over-MQTT round-trip test through an embedded broker.
+- Northbound API extended for the majordomo ACS integration: Reboot/Download/
+  FactoryReset task submits, latest-known parameter cache
+  (`Tasks.parameters/1`), device source IP + ConnectionRequestURL + WAN IP in
+  presence, connection-request Basic/Digest auth, and `Tasks.snapshot/0` +
+  `:restore` for surviving restarts.
+- `Caretaker.ACS.Auth`: inbound Basic/Digest authentication for the ACS server
+  (stateless nonces, optional per-device credential lookup), configured at mount.
+- `Caretaker.ACS`: documented Inform-subscription API (`on_inform/2`,
+  `subscribe_informs/0`) delivering `device_id`, events, `parameter_list` and
+  `source_ip`.
+- `[:caretaker, :acs, ...]` telemetry documented as a stable public contract.
+
 ## v0.3.0
 
 ### Added
