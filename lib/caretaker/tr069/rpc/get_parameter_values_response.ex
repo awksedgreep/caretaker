@@ -14,15 +14,15 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
       rpc: :get_parameter_values_response
     })
 
-    # Build as repeated ParameterValueStruct elements under ParameterList
-    pvs =
+    # Repeated ParameterValueStruct siblings under a single ParameterList
+    structs =
       Enum.map(params, fn %{name: n, value: v, type: t} ->
-        %{"ParameterValueStruct" => %{"Name" => n, "Value" => %{"@xsi:type" => t, "#text" => v}}}
+        %{"Name" => n, "Value" => %{"@xsi:type" => t, "#text" => v}}
       end)
 
     map = %{
       "cwmp:GetParameterValuesResponse" => %{
-        "ParameterList" => pvs
+        "ParameterList" => %{"ParameterValueStruct" => structs}
       }
     }
 

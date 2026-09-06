@@ -8,18 +8,20 @@ defmodule Caretaker.TR069.RPC.GetParameterAttributesResponse do
 
   @spec encode(t()) :: {:ok, iodata()} | {:error, term()}
   def encode(%{parameters: params}) do
-    pis =
+    structs =
       Enum.map(params, fn %{name: n, notification: notif, access_list: alist} ->
         %{
-          "ParameterAttributeStruct" => %{
-            "Name" => n,
-            "Notification" => Integer.to_string(notif),
-            "AccessList" => Enum.map(alist, fn s -> %{"string" => s} end)
-          }
+          "Name" => n,
+          "Notification" => Integer.to_string(notif),
+          "AccessList" => %{"string" => alist}
         }
       end)
 
-    map = %{"cwmp:GetParameterAttributesResponse" => %{"ParameterList" => pis}}
+    map = %{
+      "cwmp:GetParameterAttributesResponse" => %{
+        "ParameterList" => %{"ParameterAttributeStruct" => structs}
+      }
+    }
     Lather.Xml.Builder.build_fragment(map)
   end
 

@@ -15,7 +15,7 @@ defmodule Caretaker.TR069.RPC.SetParameterAttributes do
 
   @spec encode(t()) :: {:ok, iodata()} | {:error, term()}
   def encode(%{parameters: list}) do
-    items =
+    structs =
       Enum.map(list, fn %{
                           name: n,
                           notification_change: nc,
@@ -24,17 +24,19 @@ defmodule Caretaker.TR069.RPC.SetParameterAttributes do
                           access_list: al
                         } ->
         %{
-          "SetParameterAttributesStruct" => %{
-            "Name" => n,
-            "NotificationChange" => bool(nc),
-            "Notification" => Integer.to_string(nof),
-            "AccessListChange" => bool(ac),
-            "AccessList" => Enum.map(al, fn s -> %{"string" => s} end)
-          }
+          "Name" => n,
+          "NotificationChange" => bool(nc),
+          "Notification" => Integer.to_string(nof),
+          "AccessListChange" => bool(ac),
+          "AccessList" => %{"string" => al}
         }
       end)
 
-    map = %{"cwmp:SetParameterAttributes" => %{"ParameterList" => items}}
+    map = %{
+      "cwmp:SetParameterAttributes" => %{
+        "ParameterList" => %{"SetParameterAttributesStruct" => structs}
+      }
+    }
     Lather.Xml.Builder.build_fragment(map)
   end
 

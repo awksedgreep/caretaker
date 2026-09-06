@@ -16,7 +16,7 @@ defmodule Caretaker.TR069.RPC.GetRPCMethodsResponse do
   def encode(%__MODULE__{methods: list}) do
     map = %{
       "cwmp:GetRPCMethodsResponse" => %{
-        "MethodList" => Enum.map(list, fn m -> %{"string" => m} end)
+        "MethodList" => %{"string" => list}
       }
     }
 

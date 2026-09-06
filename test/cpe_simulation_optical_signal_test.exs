@@ -19,7 +19,15 @@ defmodule Caretaker.CPE.Simulation.OpticalSignalTest do
     :ok = DeviceState.load_profile(device_state, profile_path)
 
     on_exit(fn ->
-      if Process.alive?(device_state), do: Agent.stop(device_state)
+      # Guard against the process dying between the check and the stop (async
+      # teardown timing) so teardown never crashes the test.
+      if Process.alive?(device_state) do
+        try do
+          Agent.stop(device_state)
+        catch
+          :exit, _ -> :ok
+        end
+      end
     end)
 
     %{device_state: device_state}
@@ -32,6 +40,11 @@ defmodule Caretaker.CPE.Simulation.OpticalSignalTest do
 
       initial_tx =
         DeviceState.get(state, "Device.Optical.Interface.1.TransmitOpticalLevel")
+
+      # Seed the RNG so the (deliberately stochastic) update produces a
+      # deterministic, non-zero variation rather than a rare no-op that would
+      # flake the change assertion below.
+      :rand.seed(:exsss, {1, 2, 3})
 
       # Update multiple times
       :ok = OpticalSignal.update(state, scenario: :normal)

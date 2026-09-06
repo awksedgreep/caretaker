@@ -51,9 +51,9 @@ defmodule Caretaker.TR069.RPC.Inform do
 
     did = inform.device_id
 
-    event_list =
+    event_structs =
       Enum.map(inform.events, fn e ->
-        %{"EventStruct" => %{"EventCode" => e, "CommandKey" => ""}}
+        %{"EventCode" => e, "CommandKey" => ""}
       end)
 
     map = %{
@@ -64,7 +64,7 @@ defmodule Caretaker.TR069.RPC.Inform do
           "ProductClass" => did.product_class,
           "SerialNumber" => did.serial_number
         },
-        "Event" => event_list,
+        "Event" => %{"EventStruct" => event_structs},
         "MaxEnvelopes" => Integer.to_string(inform.max_envelopes),
         "CurrentTime" => to_iso8601(inform.current_time),
         "RetryCount" => Integer.to_string(inform.retry_count),
@@ -156,18 +156,14 @@ defmodule Caretaker.TR069.RPC.Inform do
   # tuples, or keyword-style {atom, value} pairs.
   defp encode_parameter_list([]), do: %{}
 
-  # A list of single-key maps renders as repeated sibling elements in Lather.
   defp encode_parameter_list(list) when is_list(list) do
-    Enum.map(list, fn entry ->
-      {name, value, type} = normalize_param(entry)
+    structs =
+      Enum.map(list, fn entry ->
+        {name, value, type} = normalize_param(entry)
+        %{"Name" => name, "Value" => %{"@xsi:type" => type, "#text" => value}}
+      end)
 
-      %{
-        "ParameterValueStruct" => %{
-          "Name" => name,
-          "Value" => %{"@xsi:type" => type, "#text" => value}
-        }
-      }
-    end)
+    %{"ParameterValueStruct" => structs}
   end
 
   defp encode_parameter_list(_), do: %{}

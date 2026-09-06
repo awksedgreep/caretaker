@@ -14,9 +14,8 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
   @doc """
   Encode body element (without SOAP Envelope).
 
-  `ParameterNames` is a SOAP array whose items are direct `<string>` children,
-  so the element is assembled by hand; Lather's builder cannot emit repeated
-  siblings under an element that also carries attributes.
+  `ParameterNames` is a SOAP array of direct `<string>` children carrying
+  xsi:type/arrayType attributes.
   """
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{names: names}) do
@@ -26,21 +25,17 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
       rpc: :get_parameter_values
     })
 
-    items =
-      Enum.map(names, fn n ->
-        {:ok, frag} = Lather.Xml.Builder.build_fragment(%{"string" => n})
-        frag
-      end)
+    map = %{
+      "cwmp:GetParameterValues" => %{
+        "ParameterNames" => %{
+          "@xsi:type" => "cwmp:ParameterNames",
+          "@arrayType" => "xsd:string[#{length(names)}]",
+          "string" => names
+        }
+      }
+    }
 
-    xml = [
-      "<cwmp:GetParameterValues>",
-      "<ParameterNames xsi:type=\"cwmp:ParameterNames\" arrayType=\"xsd:string[",
-      Integer.to_string(length(names)),
-      "]\">",
-      items,
-      "</ParameterNames>",
-      "</cwmp:GetParameterValues>"
-    ]
+    res = Lather.Xml.Builder.build_fragment(map)
 
     :telemetry.execute(
       [:caretaker, :tr069, :rpc, :encode, :stop],
@@ -48,7 +43,7 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
       %{rpc: :get_parameter_values}
     )
 
-    {:ok, IO.iodata_to_binary(xml)}
+    res
   end
 
   @doc "Decode request body into struct via Lather"
