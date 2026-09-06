@@ -142,20 +142,32 @@ defmodule Caretaker.ACS.RPC.Helpers do
         ],
         parameter_key: ""
       }
+
+  String values are typed `xsd:string`. To send a numeric or boolean parameter,
+  pass a native value (`{"WiFi.Channel", 6}`) or an explicit xsd type
+  (`{"WiFi.Channel", "6", "xsd:unsignedInt"}`).
   """
-  @spec set_parameters([{String.t(), String.t()}], device_type(), String.t()) ::
+  @type canonical_param ::
+          {String.t(), term()} | {String.t(), term(), String.t()}
+
+  @spec set_parameters([canonical_param()], device_type(), String.t()) ::
           SetParameterValues.t()
   def set_parameters(canonical_params, device_type, parameter_key \\ "")
       when is_list(canonical_params) do
     device_params =
-      Enum.map(canonical_params, fn {name, value} ->
+      Enum.map(canonical_params, fn param ->
+        {name, value, type} = normalize_param(param)
         device_path = ParameterMapping.to_device_path(name, device_type)
-        type = infer_xsd_type(value)
         %{name: device_path, value: value, type: type}
       end)
 
     SetParameterValues.new(device_params, parameter_key: parameter_key)
   end
+
+  # A caller may give {name, value} (type inferred) or {name, value, type}
+  # (explicit xsd type, e.g. "xsd:unsignedInt" for a channel).
+  defp normalize_param({name, value, type}) when is_binary(type), do: {name, value, type}
+  defp normalize_param({name, value}), do: {name, value, infer_xsd_type(value)}
 
   @doc """
   Generate SetParameterValues RPC to configure WiFi.
@@ -209,19 +221,11 @@ defmodule Caretaker.ACS.RPC.Helpers do
 
   defp infer_xsd_type(value) when is_float(value), do: "xsd:double"
 
-  defp infer_xsd_type(value) when is_binary(value) do
-    # Try to detect if it's a number string
-    case Integer.parse(value) do
-      {_int, ""} ->
-        "xsd:int"
-
-      _ ->
-        case Float.parse(value) do
-          {_float, ""} -> "xsd:double"
-          _ -> "xsd:string"
-        end
-    end
-  end
+  # A value handed in as a string stays a string. Guessing a numeric xsd type
+  # from a string mistypes common values (an all-numeric SSID, an 8-digit
+  # passphrase, a provisioning code) and gets them rejected by the CPE. Callers
+  # that need a numeric type pass a native integer/float, or {name, value, type}.
+  defp infer_xsd_type(value) when is_binary(value), do: "xsd:string"
 
   defp infer_xsd_type(_), do: "xsd:string"
 end

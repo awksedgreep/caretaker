@@ -135,42 +135,44 @@ defmodule Caretaker.ACS.RPC.HelpersTest do
              end)
     end
 
-    test "infers correct XSD types" do
+    test "string values are typed xsd:string, not guessed as numeric" do
       device_type = {:mikrotik, :routeros}
 
       params = [
-        {"WiFi.SSID", "MyNetwork"},
-        {"WiFi.Channel", "6"},
-        {"WiFi.Enabled", "true"}
+        {"WiFi.SSID", "2024"},
+        {"WiFi.Password", "12345678"},
+        {"WiFi.Channel", "6"}
       ]
 
       rpc = Helpers.set_parameters(params, device_type)
 
-      # Find the mapped parameters
-      ssid_param =
-        Enum.find(rpc.parameters, fn %{name: path} ->
-          String.contains?(path, "SSID")
+      # A numeric-looking SSID/passphrase/channel handed in as a string stays a
+      # string; guessing xsd:int would get it rejected by the CPE.
+      for %{type: type} <- rpc.parameters do
+        assert type == "xsd:string"
+      end
+    end
+
+    test "native values and explicit types produce numeric/boolean xsd types" do
+      device_type = {:mikrotik, :routeros}
+
+      params = [
+        {"WiFi.Channel", 6},
+        {"WiFi.Enabled", true},
+        {"WiFi.SSID", "6", "xsd:unsignedInt"}
+      ]
+
+      rpc = Helpers.set_parameters(params, device_type)
+
+      types =
+        Map.new(rpc.parameters, fn %{name: name, type: type} ->
+          {name |> String.split(".") |> List.last(), type}
         end)
 
-      channel_param =
-        Enum.find(rpc.parameters, fn %{name: path} ->
-          String.contains?(path, "Channel")
-        end)
-
-      enabled_param =
-        Enum.find(rpc.parameters, fn %{name: path} ->
-          String.contains?(path, "Enable")
-        end)
-
-      assert %{type: type} = ssid_param
-      assert type == "xsd:string"
-
-      assert %{type: type} = channel_param
-      assert type == "xsd:int"
-
-      # Note: "true" as string will be detected as string, not boolean
-      assert %{type: type} = enabled_param
-      assert type in ["xsd:string", "xsd:boolean"]
+      assert types["Channel"] == "xsd:int"
+      assert types["Enable"] == "xsd:boolean"
+      # explicit type wins even for a string value
+      assert Enum.any?(rpc.parameters, fn %{value: "6", type: "xsd:unsignedInt"} -> true; _ -> false end)
     end
   end
 
