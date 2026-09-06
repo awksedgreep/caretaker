@@ -481,6 +481,26 @@ defmodule Caretaker.CPE.Fleet do
   end
 
   @impl true
+  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
+    # A device's DeviceState or DynamicBehavior went down: mark it stopped so
+    # one crashing device never takes the whole fleet with it.
+    new_devices =
+      Map.new(state.devices, fn {sn, device} ->
+        if device.device_state == pid or device.dynamic_behavior == pid do
+          if reason not in [:normal, :shutdown] do
+            Logger.warning("Fleet device #{sn} process went down: #{inspect(reason)}")
+          end
+
+          {sn, %{device | state: :stopped, device_state: nil, dynamic_behavior: nil}}
+        else
+          {sn, device}
+        end
+      end)
+
+    {:noreply, %{state | devices: new_devices}}
+  end
+
+  @impl true
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -535,12 +555,16 @@ defmodule Caretaker.CPE.Fleet do
       serial_number: serial_number
     }
 
-    # Start DeviceState
+    # Start DeviceState, then unlink and monitor it so a device crash is
+    # observed (via :DOWN) without propagating to the fleet.
     {:ok, device_state} =
       DeviceState.start_link(
         device_id: device_id,
         params: params
       )
+
+    Process.unlink(device_state)
+    Process.monitor(device_state)
 
     # Start DynamicBehavior if configured
     dynamic_behavior =
@@ -550,6 +574,9 @@ defmodule Caretaker.CPE.Fleet do
             device_state: device_state,
             behaviors: state.behaviors
           )
+
+        Process.unlink(behavior)
+        Process.monitor(behavior)
 
         # Link behavior to device state
         DeviceState.set_option(device_state, :dynamic_behavior, behavior)
@@ -623,19 +650,10 @@ defmodule Caretaker.CPE.Fleet do
   defp get_delay(min..max//_step), do: Enum.random(min..max)
   defp get_delay(_), do: 100
 
-  defp load_profile_params(:fiber_ont) do
-    case File.read("priv/profiles/fiber_ont.json") do
-      {:ok, json} -> Jason.decode!(json)
-      _ -> default_params("Fiber ONT")
-    end
-  end
+  defp load_profile_params(:fiber_ont), do: load_profile_file("fiber_ont.json", "Fiber ONT")
 
-  defp load_profile_params(:cable_modem) do
-    case File.read("priv/profiles/cable_modem.json") do
-      {:ok, json} -> Jason.decode!(json)
-      _ -> default_params("Cable Modem")
-    end
-  end
+  defp load_profile_params(:cable_modem),
+    do: load_profile_file("cable_modem.json", "Cable Modem")
 
   defp load_profile_params(:router) do
     default_params("Router")
@@ -644,6 +662,15 @@ defmodule Caretaker.CPE.Fleet do
   defp load_profile_params(%{} = params), do: params
 
   defp load_profile_params(_), do: default_params("Generic CPE")
+
+  defp load_profile_file(filename, description) do
+    path = Application.app_dir(:caretaker, ["priv", "profiles", filename])
+
+    case File.read(path) do
+      {:ok, json} -> Jason.decode!(json)
+      _ -> default_params(description)
+    end
+  end
 
   defp default_params(description) do
     %{

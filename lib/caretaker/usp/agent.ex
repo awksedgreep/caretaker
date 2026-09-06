@@ -177,7 +177,11 @@ defmodule Caretaker.USP.Agent do
         {:reply, {:ok, response}, new_state}
 
       {:error, reason} ->
-        error_msg = Proto.build_error(7000, "Message processing failed: #{inspect(reason)}")
+        error_msg =
+          Proto.build_error(7000, "Message processing failed: #{inspect(reason)}",
+            msg_id: msg.header.msg_id
+          )
+
         {:reply, {:ok, error_msg}, state}
     end
   end
@@ -195,7 +199,11 @@ defmodule Caretaker.USP.Agent do
             {:reply, {:ok, response_record}, new_state}
 
           {:error, reason} ->
-            error_msg = Proto.build_error(7000, "Message processing failed: #{inspect(reason)}")
+            error_msg =
+              Proto.build_error(7000, "Message processing failed: #{inspect(reason)}",
+                msg_id: msg.header.msg_id
+              )
+
             response_record = Record.response_for(record, error_msg)
             {:reply, {:ok, response_record}, state}
         end
@@ -347,8 +355,9 @@ defmodule Caretaker.USP.Agent do
   defp handle_add(add, msg_id, state) do
     results =
       Enum.map(add.create_objs, fn create_obj ->
-        # For now, simulate creating an instance
-        instance_num = :rand.uniform(1000)
+        {:ok, instance_num} =
+          DeviceState.add_object_instance(state.device_state, create_obj.obj_path)
+
         instance_path = create_obj.obj_path <> "#{instance_num}."
 
         # Set initial parameters
@@ -366,8 +375,10 @@ defmodule Caretaker.USP.Agent do
   defp handle_delete(delete, msg_id, state) do
     results =
       Enum.map(delete.obj_paths, fn path ->
-        # For now, simulate successful deletion
-        {path, :success}
+        case DeviceState.delete_object_instance(state.device_state, path) do
+          :ok -> {path, :success}
+          {:error, :not_found} -> {path, {:error, 7016, "Object does not exist"}}
+        end
       end)
 
     response = Proto.build_delete_resp(results, msg_id: msg_id)

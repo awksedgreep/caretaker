@@ -231,6 +231,9 @@ defmodule Caretaker.USP.Record do
     {:error, :no_payload}
   end
 
+  def extract_message(%Record{}), do: {:error, :no_payload}
+  def extract_message(_), do: {:error, :invalid_record}
+
   @doc """
   Gets the record type.
   """

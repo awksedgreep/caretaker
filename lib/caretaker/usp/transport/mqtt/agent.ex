@@ -131,7 +131,7 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   end
 
   @impl true
-  def handle_info({:mqtt, _client_id, topic, payload}, state) do
+  def handle_info({:mqtt, topic, payload}, state) do
     # Received a message from MQTT
     Logger.debug("USP Agent received MQTT message on #{topic}")
 
@@ -146,13 +146,13 @@ defmodule Caretaker.USP.Transport.MQTT.Agent do
   end
 
   @impl true
-  def handle_info({:tortoise, _client_id, :connected}, state) do
+  def handle_info({:tortoise, :connected}, state) do
     Logger.debug("USP Agent MQTT connected")
     {:noreply, %{state | connected: true}}
   end
 
   @impl true
-  def handle_info({:tortoise, _client_id, :disconnected}, state) do
+  def handle_info({:tortoise, :disconnected}, state) do
     Logger.debug("USP Agent MQTT disconnected")
     Telemetry.emit_transport_disconnect(:mqtt, state.agent_id)
     # Attempt to reconnect

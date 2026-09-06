@@ -182,8 +182,7 @@ defmodule Caretaker.USP.Transport.WebSocket.Server do
   end
 
   @impl true
-  def handle_info({:websocket, :message, record, ws_pid}, state) do
-    agent_id = record.from_id
+  def handle_info({:websocket, :message, %{from_id: agent_id} = record, ws_pid}, state) do
 
     # Register connection if not already registered
     state =

@@ -121,10 +121,10 @@ defmodule Caretaker.Quirks.MikrotikTest do
         })
 
       assert String.contains?(script, "/ip firewall filter add")
-      assert String.contains?(script, "chain=input")
-      assert String.contains?(script, "protocol=tcp")
-      assert String.contains?(script, "dst-port=22")
-      assert String.contains?(script, "action=accept")
+      assert String.contains?(script, ~s(chain="input"))
+      assert String.contains?(script, ~s(protocol="tcp"))
+      assert String.contains?(script, ~s(dst-port="22"))
+      assert String.contains?(script, ~s(action="accept"))
     end
 
     test "generates DHCP server script" do
@@ -135,7 +135,7 @@ defmodule Caretaker.Quirks.MikrotikTest do
         })
 
       assert String.contains?(script, "/ip dhcp-server network add")
-      assert String.contains?(script, "gateway=192.168.88.1")
+      assert String.contains?(script, ~s(gateway="192.168.88.1"))
     end
 
     test "generates NAT masquerade script" do
@@ -146,7 +146,7 @@ defmodule Caretaker.Quirks.MikrotikTest do
 
       assert String.contains?(script, "/ip firewall nat add")
       assert String.contains?(script, "chain=srcnat")
-      assert String.contains?(script, "out-interface=ether1")
+      assert String.contains?(script, ~s(out-interface="ether1"))
       assert String.contains?(script, "action=masquerade")
     end
 
@@ -158,8 +158,8 @@ defmodule Caretaker.Quirks.MikrotikTest do
         })
 
       assert String.contains?(script, "/ip route add")
-      assert String.contains?(script, "dst-address=10.0.0.0/8")
-      assert String.contains?(script, "gateway=192.168.1.1")
+      assert String.contains?(script, ~s(dst-address="10.0.0.0/8"))
+      assert String.contains?(script, ~s(gateway="192.168.1.1"))
     end
 
     test "generates WiFi security script" do
@@ -171,16 +171,16 @@ defmodule Caretaker.Quirks.MikrotikTest do
         })
 
       assert String.contains?(script, "/interface wireless security-profiles add")
-      assert String.contains?(script, "name=secure-wifi")
-      assert String.contains?(script, "wpa2-pre-shared-key=MySecurePassword123")
-      assert String.contains?(script, "/interface wireless set wlan1")
+      assert String.contains?(script, ~s(name="secure-wifi"))
+      assert String.contains?(script, ~s(wpa2-pre-shared-key="MySecurePassword123"))
+      assert String.contains?(script, ~s(/interface wireless set "wlan1"))
     end
 
     test "generates system identity script" do
       script = Mikrotik.generate_script(:system_identity, %{name: "MyRouter"})
 
       assert String.contains?(script, "/system identity set")
-      assert String.contains?(script, "name=MyRouter")
+      assert String.contains?(script, ~s(name="MyRouter"))
     end
 
     test "returns empty string for unknown script type" do

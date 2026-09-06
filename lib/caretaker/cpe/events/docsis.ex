@@ -230,7 +230,9 @@ defmodule Caretaker.CPE.Events.DOCSIS do
     events =
       for ch <- 1..downstream_count, reduce: [] do
         acc ->
-          snr = DeviceState.get(device_state, "Device.Docsis.Downstream.#{ch}.SNR")
+          snr =
+            DeviceState.get(device_state, "Device.Docsis.Downstream.#{ch}.SNRLevel") ||
+              DeviceState.get(device_state, "Device.Docsis.Downstream.#{ch}.SNR")
 
           cond do
             snr && snr < 25.0 ->
@@ -273,13 +275,13 @@ defmodule Caretaker.CPE.Events.DOCSIS do
             DeviceState.get(
               device_state,
               "Device.Docsis.Downstream.#{ch}.Stats.CorrectableErrors"
-            ) || 0
+            ) || DeviceState.get(device_state, "Device.Docsis.Downstream.#{ch}.Correcteds") || 0
 
           uncorrectable =
             DeviceState.get(
               device_state,
               "Device.Docsis.Downstream.#{ch}.Stats.UncorrectableErrors"
-            ) || 0
+            ) || DeviceState.get(device_state, "Device.Docsis.Downstream.#{ch}.Uncorrectables") || 0
 
           cond do
             uncorrectable > 100 ->

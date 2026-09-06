@@ -247,10 +247,10 @@ defmodule Caretaker.Quirks.Mikrotik do
   def generate_script(:firewall_rule, params) do
     """
     /ip firewall filter add \\
-      chain=#{params[:chain]} \\
-      protocol=#{params[:protocol]} \\
-      dst-port=#{params[:dst_port]} \\
-      action=#{params[:action]} \\
+      chain=#{q(params[:chain])} \\
+      protocol=#{q(params[:protocol])} \\
+      dst-port=#{q(params[:dst_port])} \\
+      action=#{q(params[:action])} \\
       comment="Added via TR-069"
     """
   end
@@ -258,9 +258,9 @@ defmodule Caretaker.Quirks.Mikrotik do
   def generate_script(:dhcp_server, params) do
     """
     /ip dhcp-server network add \\
-      address=#{params[:network]} \\
-      gateway=#{params[:gateway]} \\
-      dns-server=#{params[:dns_servers] || "1.1.1.1,8.8.8.8"} \\
+      address=#{q(params[:network])} \\
+      gateway=#{q(params[:gateway])} \\
+      dns-server=#{q(params[:dns_servers] || "1.1.1.1,8.8.8.8")} \\
       comment="Added via TR-069"
     """
   end
@@ -269,7 +269,7 @@ defmodule Caretaker.Quirks.Mikrotik do
     """
     /ip firewall nat add \\
       chain=srcnat \\
-      out-interface=#{params[:out_interface]} \\
+      out-interface=#{q(params[:out_interface])} \\
       action=masquerade \\
       comment="Added via TR-069"
     """
@@ -278,9 +278,9 @@ defmodule Caretaker.Quirks.Mikrotik do
   def generate_script(:static_route, params) do
     """
     /ip route add \\
-      dst-address=#{params[:dst_address]} \\
-      gateway=#{params[:gateway]} \\
-      distance=#{params[:distance] || 1} \\
+      dst-address=#{q(params[:dst_address])} \\
+      gateway=#{q(params[:gateway])} \\
+      distance=#{q(params[:distance] || 1)} \\
       comment="Added via TR-069"
     """
   end
@@ -288,20 +288,20 @@ defmodule Caretaker.Quirks.Mikrotik do
   def generate_script(:wifi_security, params) do
     """
     /interface wireless security-profiles add \\
-      name=#{params[:profile_name]} \\
+      name=#{q(params[:profile_name])} \\
       mode=dynamic-keys \\
       authentication-types=wpa2-psk \\
-      wpa2-pre-shared-key=#{params[:passphrase]} \\
+      wpa2-pre-shared-key=#{q(params[:passphrase])} \\
       comment="Added via TR-069"
 
-    /interface wireless set #{params[:interface]} \\
-      security-profile=#{params[:profile_name]}
+    /interface wireless set #{q(params[:interface])} \\
+      security-profile=#{q(params[:profile_name])}
     """
   end
 
   def generate_script(:system_identity, params) do
     """
-    /system identity set name=#{params[:name]}
+    /system identity set name=#{q(params[:name])}
     """
   end
 
@@ -422,6 +422,20 @@ defmodule Caretaker.Quirks.Mikrotik do
   end
 
   def adequate_version?(_), do: false
+
+  # Quote and escape a value for safe interpolation into a RouterOS script,
+  # preventing command injection through untrusted parameter values.
+  defp q(nil), do: "\"\""
+
+  defp q(value) do
+    escaped =
+      value
+      |> to_string()
+      |> String.replace("\\", "\\\\")
+      |> String.replace("\"", "\\\"")
+
+    "\"" <> escaped <> "\""
+  end
 
   # Helper function to match parameter patterns
   defp pattern_matches?(pattern, path) do

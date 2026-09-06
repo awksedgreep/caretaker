@@ -58,7 +58,7 @@ defmodule Caretaker.CPE.Events.PON do
     # Check RX power
     events =
       cond do
-        lower_threshold && rx_power < lower_threshold ->
+        lower_threshold && rx_power && rx_power < lower_threshold ->
           Logger.warning(
             "Optical RX power alarm: #{rx_power} dBm below threshold #{lower_threshold} dBm"
           )
@@ -71,7 +71,7 @@ defmodule Caretaker.CPE.Events.PON do
             | events
           ]
 
-        upper_threshold && rx_power > upper_threshold ->
+        upper_threshold && rx_power && rx_power > upper_threshold ->
           Logger.warning(
             "Optical RX power alarm: #{rx_power} dBm above threshold #{upper_threshold} dBm"
           )
@@ -116,6 +116,9 @@ defmodule Caretaker.CPE.Events.PON do
     temp = DeviceState.get(device_state, "Device.Optical.Interface.1.Temperature")
 
     cond do
+      is_nil(temp) ->
+        []
+
       temp >= 80.0 ->
         Logger.error("Critical temperature alarm: #{temp}°C")
         [create_event("X_TEMPERATURE_ALARM", "critical", %{temperature: temp})]
