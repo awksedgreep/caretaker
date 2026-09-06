@@ -1,5 +1,5 @@
 defmodule Caretaker.ACS.ServerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Plug.Test
 
   test "POST /cwmp with empty body responds 204 and text/plain" do

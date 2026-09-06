@@ -1,5 +1,5 @@
 defmodule Caretaker.MQTT.BridgeTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Caretaker.MQTT.Bridge
   alias Caretaker.PubSub
