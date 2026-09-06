@@ -373,9 +373,10 @@ End-to-end testing and documentation.
 - MQTT topic structure compliance with USP specification
 - Transport module structure and exports
 
-Full end-to-end MQTT tests with actual message flow require an external
-MQTT broker (e.g., Mosquitto) due to protocol compatibility between
-Nipper (MQTT v3.1.1 broker) and Tortoise311 (MQTT client).
+Full end-to-end MQTT message flow is covered by
+`test/integration/usp_mqtt_roundtrip_test.exs`, which runs the embedded
+`Caretaker.USP.Transport.MQTT.Broker` (see "USP-over-MQTT broker" below) and
+drives a Controller-to-Agent round trip through it — no external broker needed.
 
 ---
 
