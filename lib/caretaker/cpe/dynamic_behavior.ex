@@ -278,12 +278,16 @@ defmodule Caretaker.CPE.DynamicBehavior do
   end
 
   @impl true
+  def handle_info(:periodic_inform_tick, %{running: false} = state), do: {:noreply, state}
+
   def handle_info(:periodic_inform_tick, state) do
     new_state = do_periodic_inform(state)
     {:noreply, schedule_periodic_inform(new_state)}
   end
 
   @impl true
+  def handle_info(:dynamic_params_tick, %{running: false} = state), do: {:noreply, state}
+
   def handle_info(:dynamic_params_tick, state) do
     new_state = do_update_dynamic_params(state)
     {:noreply, schedule_dynamic_params(new_state)}

@@ -129,27 +129,21 @@ defmodule Caretaker.CWMP.SOAP do
           env["soapenv:Body"] || env["SOAP-ENV:Body"] || env["s:Body"] || env["soap:Body"] ||
             env["Body"] || %{}
 
+        # Prefer a non-Fault element; fall back to the Fault element itself so
+        # callers see rpc: "Fault" regardless of the SOAP prefix in use.
+        keys = Map.keys(body)
+
         rpc_key =
-          body
-          |> Map.keys()
-          |> Enum.find(fn k -> k not in ["soap:Fault", "Fault"] end)
+          Enum.find(keys, fn k -> local_name(k) != "Fault" end) ||
+            Enum.find(keys, fn k -> local_name(k) == "Fault" end)
 
-        op = rpc_key && String.split(rpc_key, ":") |> List.last()
+        op = rpc_key && local_name(rpc_key)
 
-        # Rebuild RPC fragment using Lather builder to avoid regex fragility
-        rpc_xml =
-          case rpc_key do
-            nil ->
-              nil
-
-            key ->
-              node = body[key] || %{}
-
-              case Lather.Xml.Builder.build_fragment(%{key => node}) do
-                {:ok, frag} -> frag
-                _ -> nil
-              end
-          end
+        # Slice the RPC element out of the original document. Re-encoding the
+        # parsed map would collapse repeated siblings (ParameterValueStruct,
+        # string) into a single nested element. The element's prefix is
+        # normalized to `cwmp:` so RPC decoders can rely on it.
+        rpc_xml = rpc_key && slice_rpc(xml, rpc_key, body[rpc_key] || %{})
 
         {:ok,
          %{
@@ -168,5 +162,47 @@ defmodule Caretaker.CWMP.SOAP do
   @spec content_type() :: String.t()
   def content_type, do: "text/xml; charset=utf-8"
 
-  # -- internal helpers --
+  defp slice_rpc(xml, key, node) do
+    escaped = Regex.escape(key)
+
+    case Regex.run(~r/<#{escaped}(?:\s[^>]*)?(?:\/>|>.*?<\/#{escaped}\s*>)/s, xml) do
+      [frag] ->
+        normalize_prefix(frag, key)
+
+      _ ->
+        case Lather.Xml.Builder.build_fragment(%{key => node}) do
+          {:ok, frag} -> frag
+          _ -> nil
+        end
+    end
+  end
+
+  defp normalize_prefix(frag, key) do
+    case String.split(key, ":") do
+      # A SOAP Fault keeps its own prefix; rewriting it to cwmp: would collide
+      # with the nested cwmp:Fault detail element and lose the fault code.
+      [_prefix, "Fault"] ->
+        frag
+
+      [prefix, local] when prefix != "cwmp" ->
+        frag
+        |> String.replace("<" <> key, "<cwmp:" <> local)
+        |> String.replace("</" <> key, "</cwmp:" <> local)
+
+      [_local] ->
+        frag
+
+      _ ->
+        frag
+    end
+  end
+
+  @doc "Return the local (unprefixed) name of an XML element key."
+  @spec local_name(String.t()) :: String.t()
+  def local_name(key) when is_binary(key), do: key |> String.split(":") |> List.last()
+
+  @doc "True when the decoded envelope body carries a SOAP Fault."
+  @spec fault?(%{body: map()}) :: boolean()
+  def fault?(%{body: %{rpc: "Fault"}}), do: true
+  def fault?(_), do: false
 end

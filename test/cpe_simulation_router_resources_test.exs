@@ -19,7 +19,15 @@ defmodule Caretaker.CPE.Simulation.RouterResourcesTest do
     :ok = DeviceState.load_profile(device_state, profile_path)
 
     on_exit(fn ->
-      if Process.alive?(device_state), do: Agent.stop(device_state)
+      # Guard against the process dying between the check and the stop (async
+      # teardown timing) so teardown never crashes the test.
+      if Process.alive?(device_state) do
+        try do
+          Agent.stop(device_state)
+        catch
+          :exit, _ -> :ok
+        end
+      end
     end)
 
     %{device_state: device_state}

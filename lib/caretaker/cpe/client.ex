@@ -1,22 +1,38 @@
 defmodule Caretaker.CPE.Client do
   @moduledoc """
-  Minimal CPE HTTP client for initiating a TR-069 session:
-  - Sends Inform to the ACS
+  Minimal CPE HTTP client for running a TR-069 session:
+  - Sends Inform (with the forced Inform parameters when a DeviceState is given)
   - Awaits InformResponse
-  - Sends an empty POST to fetch the next queued RPC (e.g., GetParameterValues)
+  - Sends an empty POST, then answers every RPC the ACS returns until the ACS
+    replies 204 (end of session)
+  - Echoes session cookies and answers Basic/Digest authentication challenges
   - Supports firmware upgrade simulation via FirmwareSimulator
 
-  This module uses Finch for HTTP. Ensure a Finch supervisor is running:
-    {Finch, name: Caretaker.Finch}
+  This module uses Finch for HTTP. Applications should run
+  `{Finch, name: Caretaker.Finch}` in their supervision tree; otherwise a
+  detached pool is started on first use (see `Caretaker.HTTP`).
   """
   alias Caretaker.CWMP.SOAP
+  alias Caretaker.HTTP
   alias Caretaker.TR069.RPC.Inform
+  alias Caretaker.CPE.DeviceState
   alias Caretaker.CPE.FirmwareSimulator
 
   @default_timeout 5_000
   @default_backoff 200
   @default_max_retries 3
   @default_cwmp_ns "urn:dslforum-org:cwmp-1-0"
+  @user_agent "CaretakerCPE/" <> Mix.Project.config()[:version]
+
+  # Parameters TR-069 requires in every Inform (when the device has them).
+  @forced_inform_params [
+    "Device.DeviceInfo.HardwareVersion",
+    "Device.DeviceInfo.SoftwareVersion",
+    "Device.DeviceInfo.ProvisioningCode",
+    "Device.ManagementServer.ParameterKey",
+    "Device.ManagementServer.ConnectionRequestURL",
+    "Device.ManagementServer.AliasBasedAddressing"
+  ]
 
   @type device_id :: %{
           manufacturer: String.t(),
@@ -37,28 +53,29 @@ defmodule Caretaker.CPE.Client do
           | {:error, term()}
 
   @doc """
-  Run a one-shot TR-069 session against an ACS URL.
+  Run a TR-069 session against an ACS URL.
+
   Steps:
     1) POST Inform and verify InformResponse
-    2) POST empty body to fetch queued RPC
-  Returns the received RPC (if any) with metadata.
+    2) POST an empty body; answer each RPC the ACS returns, and end when the
+       ACS answers with 204
+
+  Returns the last RPC handled (if any) with metadata.
 
   Options:
     - `device_id` - Device identification map (required if no device_state)
     - `device_state` - DeviceState agent (optional, enables stateful responses)
-    - `device_profile` - Path to JSON profile to load (optional)
     - `timeout`, `max_retries`, `backoff_base` - HTTP settings
     - `events` - Event codes for Inform (default: ["1 BOOT"])
+    - `parameter_list` - Inform ParameterList entries (`%{name, value, type}`);
+      defaults to the forced Inform parameters read from `device_state`
     - `cwmp_ns` - CWMP namespace
+    - `username`, `password` - Credentials for Basic/Digest challenges
   """
   @spec run_session(String.t(), keyword()) :: session_result()
   def run_session(acs_url, opts \\ []) when is_binary(acs_url) do
     :telemetry.execute([:caretaker, :cpe_client, :session, :start], %{}, %{acs_url: acs_url})
 
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
-    cwmp_ns = Keyword.get(opts, :cwmp_ns, @default_cwmp_ns)
-    max_retries = Keyword.get(opts, :max_retries, @default_max_retries)
-    backoff_base = Keyword.get(opts, :backoff_base, @default_backoff)
     device_state = Keyword.get(opts, :device_state)
 
     device_id =
@@ -69,57 +86,46 @@ defmodule Caretaker.CPE.Client do
         serial_number: "XYZ123"
       })
 
+    ctx = %{
+      acs_url: acs_url,
+      timeout: Keyword.get(opts, :timeout, @default_timeout),
+      max_retries: Keyword.get(opts, :max_retries, @default_max_retries),
+      backoff_base: Keyword.get(opts, :backoff_base, @default_backoff),
+      device_id: device_id,
+      device_state: device_state,
+      cwmp_ns: Keyword.get(opts, :cwmp_ns, @default_cwmp_ns),
+      credentials: credentials(opts),
+      cookies: %{},
+      authorization: nil
+    }
+
     inform =
       Inform.new(
         device_id: device_id,
         events: Keyword.get(opts, :events, ["1 BOOT"]),
         max_envelopes: 1,
-        retry_count: 0
+        retry_count: Keyword.get(opts, :retry_count, 0),
+        parameter_list: Keyword.get_lazy(opts, :parameter_list, fn -> inform_params(device_state) end)
       )
 
     cwmp_id = gen_id()
 
     with {:ok, inform_body} <- Inform.encode(inform),
-         {:ok, inform_env} <- SOAP.encode_envelope(inform_body, %{id: cwmp_id, cwmp_ns: cwmp_ns}),
-         :ok <- ensure_finch_started(),
-         {:ok, %{status: 200, body: ack_xml}} <-
-           http_retry(
-             fn ->
-               http_post_xml(acs_url, inform_env, timeout)
-             end,
-             max_retries,
-             backoff_base
-           ),
-         {:ok, %{body: %{rpc: "InformResponse"}}} <- SOAP.decode_envelope(ack_xml) do
-      case session_loop(
-             acs_url,
-             cwmp_ns,
-             device_id,
-             device_state,
-             timeout,
-             max_retries,
-             backoff_base
-           ) do
-        {:ok, last_rpc} ->
-          :telemetry.execute([:caretaker, :cpe_client, :session, :stop], %{}, %{
-            acs_url: acs_url,
-            cwmp_id: cwmp_id,
-            cwmp_ns: cwmp_ns,
-            rpc: last_rpc
-          })
+         {:ok, inform_env} <-
+           SOAP.encode_envelope(inform_body, %{id: cwmp_id, cwmp_ns: ctx.cwmp_ns}),
+         :ok <- HTTP.ensure_finch(),
+         {:ok, ack, ctx} <- http_retry(ctx, &http_post_xml(&1, inform_env)),
+         {:ok, ctx} <- expect_inform_response(ack, ctx),
+         {:ok, last_rpc} <- session_loop(ctx) do
+      :telemetry.execute([:caretaker, :cpe_client, :session, :stop], %{}, %{
+        acs_url: acs_url,
+        cwmp_id: cwmp_id,
+        cwmp_ns: ctx.cwmp_ns,
+        rpc: last_rpc
+      })
 
-          {:ok,
-           %{cwmp_id: cwmp_id, cwmp_ns: cwmp_ns, inform_ack: true, rpc: last_rpc, rpc_xml: nil}}
-
-        {:error, reason} = err ->
-          :telemetry.execute([:caretaker, :cpe_client, :error], %{}, %{
-            acs_url: acs_url,
-            cwmp_id: cwmp_id,
-            reason: reason
-          })
-
-          err
-      end
+      {:ok,
+       %{cwmp_id: cwmp_id, cwmp_ns: ctx.cwmp_ns, inform_ack: true, rpc: last_rpc, rpc_xml: nil}}
     else
       {:error, reason} = err ->
         :telemetry.execute([:caretaker, :cpe_client, :error], %{}, %{
@@ -132,190 +138,148 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-  defp session_loop(
-         acs_url,
-         prev_ns,
-         device_id,
-         device_state,
-         timeout,
-         max_retries,
-         backoff_base,
-         last_rpc \\ nil
-       ) do
-    empty_res =
-      http_retry(
-        fn ->
-          http_post_empty(acs_url, timeout)
-        end,
-        max_retries,
-        backoff_base
-      )
+  # -- Inform helpers --
 
-    case empty_res do
-      {:ok, %{status: 204}} ->
-        {:ok, last_rpc}
-
-      {:ok, %{status: 200, body: rpc_xml}} ->
-        case SOAP.decode_envelope(rpc_xml) do
-          {:ok, %{header: %{id: id, cwmp_ns: ns2}, body: %{rpc: rpc_name, xml: body_xml}}} ->
-            :telemetry.execute([:caretaker, :cpe_client, :rpc, :received], %{}, %{
-              acs_url: acs_url,
-              cwmp_ns: ns2 || prev_ns,
-              rpc: rpc_name
-            })
-
-            _ =
-              respond_to_rpc(
-                acs_url,
-                rpc_name,
-                body_xml,
-                device_id,
-                device_state,
-                ns2 || prev_ns,
-                timeout,
-                id
-              )
-
-            session_loop(
-              acs_url,
-              ns2 || prev_ns,
-              device_id,
-              device_state,
-              timeout,
-              max_retries,
-              backoff_base,
-              rpc_name
-            )
-
-          {:ok, _other} ->
-            {:error, :unexpected_envelope}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-
-      other ->
-        {:error, {:unexpected, other}}
+  defp credentials(opts) do
+    case {Keyword.get(opts, :username), Keyword.get(opts, :password)} do
+      {nil, _} -> nil
+      {user, pass} -> %{username: user, password: pass || ""}
     end
   end
 
-  defp respond_to_rpc(acs_url, rpc, rpc_xml, device_id, device_state, ns, timeout, id)
+  defp inform_params(nil), do: []
 
-  defp respond_to_rpc(
-         acs_url,
-         "GetParameterValues",
-         rpc_xml,
-         device_id,
-         device_state,
-         ns,
-         timeout,
-         id
-       ) do
-    # Parse the GetParameterValues XML to extract requested parameter names
+  defp inform_params(device_state) do
+    Enum.flat_map(@forced_inform_params, fn path ->
+      case DeviceState.get_parameters(device_state, path) do
+        [param | _] -> [param]
+        _ -> []
+      end
+    end)
+  end
+
+  defp expect_inform_response(%{status: 200, body: ack_xml}, ctx) do
+    case SOAP.decode_envelope(ack_xml) do
+      {:ok, %{header: %{cwmp_ns: ns}, body: %{rpc: "InformResponse"}}} ->
+        {:ok, %{ctx | cwmp_ns: ns}}
+
+      {:ok, %{body: %{rpc: "Fault", xml: xml}}} ->
+        {:error, {:fault, decode_fault(xml)}}
+
+      {:ok, %{body: %{rpc: other}}} ->
+        {:error, {:unexpected_rpc, other}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp expect_inform_response(%{status: status}, _ctx), do: {:error, {:http, status}}
+
+  defp decode_fault(nil), do: %{code: "", string: ""}
+
+  defp decode_fault(xml) do
+    case Caretaker.TR069.RPC.Fault.decode(xml) do
+      {:ok, %{code: code, string: string}} -> %{code: code, string: string}
+      _ -> %{code: "", string: ""}
+    end
+  end
+
+  # -- Session loop --
+  #
+  # The CPE has nothing more to send after Inform, so it POSTs an empty body.
+  # The ACS answers either with an RPC (which we respond to, and the ACS
+  # answers that response with the next RPC or 204) or with 204, ending the
+  # session.
+
+  defp session_loop(ctx) do
+    case http_retry(ctx, &http_post_empty/1) do
+      {:ok, reply, ctx} -> handle_acs_reply(reply, ctx, nil)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp handle_acs_reply(%{status: 204}, _ctx, last_rpc), do: {:ok, last_rpc}
+
+  defp handle_acs_reply(%{status: 200, body: body}, ctx, last_rpc) do
+    case SOAP.decode_envelope(body) do
+      {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: rpc_name, xml: body_xml}}}
+      when is_binary(rpc_name) ->
+        ctx = %{ctx | cwmp_ns: ns}
+
+        :telemetry.execute([:caretaker, :cpe_client, :rpc, :received], %{}, %{
+          acs_url: ctx.acs_url,
+          cwmp_ns: ctx.cwmp_ns,
+          rpc: rpc_name
+        })
+
+        case respond_to_rpc(ctx, rpc_name, body_xml, id) do
+          {:ok, next_reply, ctx} -> handle_acs_reply(next_reply, ctx, rpc_name)
+          {:end_session, _reply, _ctx} -> {:ok, rpc_name}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:ok, _} ->
+        # A 200 with no RPC element is treated as end of session
+        {:ok, last_rpc}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp handle_acs_reply(%{status: status}, _ctx, _last_rpc), do: {:error, {:http, status}}
+
+  # -- RPC handlers --
+  #
+  # Each handler builds a response body and returns
+  # {:ok, next_acs_reply, ctx} | {:end_session, reply, ctx} | {:error, reason}
+
+  defp respond_to_rpc(ctx, "GetParameterValues", rpc_xml, id) do
     requested_paths = parse_parameter_names(rpc_xml)
 
     params =
-      case device_state do
+      case ctx.device_state do
         nil ->
-          # Fallback: return minimal hardcoded params from device_id
           [
             %{
               name: "Device.DeviceInfo.Manufacturer",
-              value: device_id.manufacturer,
+              value: ctx.device_id.manufacturer,
               type: "xsd:string"
             },
             %{
               name: "Device.DeviceInfo.SerialNumber",
-              value: device_id.serial_number,
+              value: ctx.device_id.serial_number,
               type: "xsd:string"
             }
           ]
 
         state ->
-          # Use DeviceState to get requested parameters
-          Enum.flat_map(requested_paths, fn path ->
-            Caretaker.CPE.DeviceState.get_parameters(state, path)
-          end)
+          Enum.flat_map(requested_paths, &DeviceState.get_parameters(state, &1))
       end
 
-    with {:ok, body} <-
-           Caretaker.TR069.RPC.GetParameterValuesResponse.encode(%{parameters: params}),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "GetParameterValues",
-        param_count: length(params)
-      })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+    with {:ok, body} <- Caretaker.TR069.RPC.GetParameterValuesResponse.encode(%{parameters: params}) do
+      send_response(ctx, body, id, %{rpc: "GetParameterValues", param_count: length(params)})
     end
   end
 
-  defp respond_to_rpc(
-         acs_url,
-         "SetParameterValues",
-         rpc_xml,
-         _device_id,
-         device_state,
-         ns,
-         timeout,
-         id
-       ) do
-    # Parse SetParameterValues XML to extract parameters
+  defp respond_to_rpc(ctx, "SetParameterValues", rpc_xml, id) do
     params_to_set = parse_parameter_values(rpc_xml)
 
-    case device_state do
-      nil ->
-        # No state to update, just return success
-        :ok
+    if ctx.device_state && params_to_set != [] do
+      DeviceState.update_parameters(ctx.device_state, params_to_set)
 
-      state when params_to_set != [] ->
-        # Update device state with new parameter values
-        Caretaker.CPE.DeviceState.update_parameters(state, params_to_set)
-
-        :telemetry.execute([:caretaker, :cpe_client, :params, :updated], %{}, %{
-          count: length(params_to_set)
-        })
-
-      _ ->
-        :ok
+      :telemetry.execute([:caretaker, :cpe_client, :params, :updated], %{}, %{
+        count: length(params_to_set)
+      })
     end
 
-    with {:ok, body} <- Caretaker.TR069.RPC.SetParameterValuesResponse.encode(%{status: 0}),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "SetParameterValues"
-      })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+    with {:ok, body} <- Caretaker.TR069.RPC.SetParameterValuesResponse.encode(%{status: 0}) do
+      send_response(ctx, body, id, %{rpc: "SetParameterValues"})
     end
   end
 
-  defp respond_to_rpc(
-         acs_url,
-         "GetParameterNames",
-         rpc_xml,
-         _device_id,
-         device_state,
-         ns,
-         timeout,
-         id
-       ) do
-    # Parse GetParameterNames RPC to extract path and next_level
+  defp respond_to_rpc(ctx, "GetParameterNames", rpc_xml, id) do
     {path, next_level} =
       case Caretaker.TR069.RPC.GetParameterNames.decode(rpc_xml) do
         {:ok, %{parameter_path: p, next_level: nl}} -> {p, nl}
@@ -323,46 +287,21 @@ defmodule Caretaker.CPE.Client do
       end
 
     params =
-      case device_state do
-        nil ->
-          # Fallback: return minimal set
-          [%{name: "Device.DeviceInfo.", writable: false}]
-
-        state ->
-          # Use DeviceState to get parameter names
-          Caretaker.CPE.DeviceState.get_parameter_names(state, path, next_level)
+      case ctx.device_state do
+        nil -> [%{name: "Device.DeviceInfo.", writable: false}]
+        state -> DeviceState.get_parameter_names(state, path, next_level)
       end
 
-    with {:ok, body} <-
-           Caretaker.TR069.RPC.GetParameterNamesResponse.encode(%{parameters: params}),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
+    with {:ok, body} <- Caretaker.TR069.RPC.GetParameterNamesResponse.encode(%{parameters: params}) do
+      send_response(ctx, body, id, %{
         rpc: "GetParameterNames",
         param_count: length(params),
         next_level: next_level
       })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp respond_to_rpc(
-         acs_url,
-         "GetRPCMethods",
-         _rpc_xml,
-         _device_id,
-         _device_state,
-         ns,
-         timeout,
-         id
-       ) do
-    # Return list of supported RPC methods
+  defp respond_to_rpc(ctx, "GetRPCMethods", _rpc_xml, id) do
     methods = [
       "GetRPCMethods",
       "GetParameterValues",
@@ -379,34 +318,12 @@ defmodule Caretaker.CPE.Client do
 
     response = %Caretaker.TR069.RPC.GetRPCMethodsResponse{methods: methods}
 
-    with {:ok, body} <- Caretaker.TR069.RPC.GetRPCMethodsResponse.encode(response),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "GetRPCMethods",
-        method_count: length(methods)
-      })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+    with {:ok, body} <- Caretaker.TR069.RPC.GetRPCMethodsResponse.encode(response) do
+      send_response(ctx, body, id, %{rpc: "GetRPCMethods", method_count: length(methods)})
     end
   end
 
-  defp respond_to_rpc(
-         acs_url,
-         "GetParameterAttributes",
-         rpc_xml,
-         _device_id,
-         device_state,
-         ns,
-         timeout,
-         id
-       ) do
-    # Parse GetParameterAttributes RPC to extract parameter names
+  defp respond_to_rpc(ctx, "GetParameterAttributes", rpc_xml, id) do
     paths =
       case Caretaker.TR069.RPC.GetParameterAttributes.decode(rpc_xml) do
         {:ok, %{names: names}} -> names
@@ -414,194 +331,114 @@ defmodule Caretaker.CPE.Client do
       end
 
     params =
-      case device_state do
-        nil ->
-          # Fallback: return minimal attributes
-          Enum.map(paths, fn p -> %{name: p, notification: 0, access_list: ["Subscriber"]} end)
-
-        state ->
-          Caretaker.CPE.DeviceState.get_parameter_attributes(state, paths)
+      case ctx.device_state do
+        nil -> Enum.map(paths, &%{name: &1, notification: 0, access_list: ["Subscriber"]})
+        state -> DeviceState.get_parameter_attributes(state, paths)
       end
 
     with {:ok, body} <-
-           Caretaker.TR069.RPC.GetParameterAttributesResponse.encode(%{parameters: params}),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "GetParameterAttributes",
-        param_count: length(params)
-      })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+           Caretaker.TR069.RPC.GetParameterAttributesResponse.encode(%{parameters: params}) do
+      send_response(ctx, body, id, %{rpc: "GetParameterAttributes", param_count: length(params)})
     end
   end
 
-  defp respond_to_rpc(
-         acs_url,
-         "SetParameterAttributes",
-         rpc_xml,
-         _device_id,
-         device_state,
-         ns,
-         timeout,
-         id
-       ) do
-    # Parse SetParameterAttributes RPC
+  defp respond_to_rpc(ctx, "SetParameterAttributes", rpc_xml, id) do
     attrs =
       case Caretaker.TR069.RPC.SetParameterAttributes.decode(rpc_xml) do
         {:ok, %{parameters: params}} -> params
         _ -> []
       end
 
-    case device_state do
-      nil ->
-        :ok
-
-      state when attrs != [] ->
-        Caretaker.CPE.DeviceState.set_parameter_attributes(state, attrs)
-
-        :telemetry.execute([:caretaker, :cpe_client, :attrs, :updated], %{}, %{
-          count: length(attrs)
-        })
-
-      _ ->
-        :ok
+    if ctx.device_state && attrs != [] do
+      DeviceState.set_parameter_attributes(ctx.device_state, attrs)
+      :telemetry.execute([:caretaker, :cpe_client, :attrs, :updated], %{}, %{count: length(attrs)})
     end
 
     response = %Caretaker.TR069.RPC.SetParameterAttributesResponse{}
 
-    with {:ok, body} <- Caretaker.TR069.RPC.SetParameterAttributesResponse.encode(response),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "SetParameterAttributes"
-      })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+    with {:ok, body} <- Caretaker.TR069.RPC.SetParameterAttributesResponse.encode(response) do
+      send_response(ctx, body, id, %{rpc: "SetParameterAttributes"})
     end
   end
 
-  defp respond_to_rpc(acs_url, "AddObject", rpc_xml, _device_id, device_state, ns, timeout, id) do
-    # Parse AddObject RPC
-    {object_path, _param_key} =
+  defp respond_to_rpc(ctx, "AddObject", rpc_xml, id) do
+    object_path =
       case Caretaker.TR069.RPC.AddObject.decode(rpc_xml) do
-        {:ok, %{object_name: name, parameter_key: key}} -> {name, key}
-        _ -> {"", ""}
+        {:ok, %{object_name: name}} -> name
+        _ -> ""
       end
 
-    {instance_number, status} =
-      case device_state do
+    instance_number =
+      case ctx.device_state do
         nil ->
-          # Fallback: return a fake instance number
-          {1, 0}
+          1
 
         state ->
-          {:ok, inst} = Caretaker.CPE.DeviceState.add_object_instance(state, object_path)
-          {inst, 0}
+          {:ok, inst} = DeviceState.add_object_instance(state, object_path)
+          inst
       end
 
     with {:ok, body} <-
            Caretaker.TR069.RPC.AddObjectResponse.encode(%{
              instance_number: instance_number,
-             status: status
-           }),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
+             status: 0
+           }) do
+      send_response(ctx, body, id, %{
         rpc: "AddObject",
         object_path: object_path,
         instance_number: instance_number
       })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp respond_to_rpc(acs_url, "DeleteObject", rpc_xml, _device_id, device_state, ns, timeout, id) do
-    # Parse DeleteObject RPC
-    {object_path, _param_key} =
+  defp respond_to_rpc(ctx, "DeleteObject", rpc_xml, id) do
+    object_path =
       case Caretaker.TR069.RPC.DeleteObject.decode(rpc_xml) do
-        {:ok, %{object_name: name, parameter_key: key}} -> {name, key}
-        _ -> {"", ""}
+        {:ok, %{object_name: name}} -> name
+        _ -> ""
       end
 
     status =
-      case device_state do
+      case ctx.device_state do
         nil ->
-          # Fallback: return success
           0
 
         state ->
-          case Caretaker.CPE.DeviceState.delete_object_instance(state, object_path) do
+          case DeviceState.delete_object_instance(state, object_path) do
             :ok -> 0
             {:error, :not_found} -> 1
           end
       end
 
-    with {:ok, body} <- Caretaker.TR069.RPC.DeleteObjectResponse.encode(%{status: status}),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "DeleteObject",
-        object_path: object_path
-      })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+    with {:ok, body} <- Caretaker.TR069.RPC.DeleteObjectResponse.encode(%{status: status}) do
+      send_response(ctx, body, id, %{rpc: "DeleteObject", object_path: object_path})
     end
   end
 
-  defp respond_to_rpc(acs_url, "Download", rpc_xml, _device_id, device_state, ns, timeout, id) do
-    # Parse Download RPC
+  defp respond_to_rpc(ctx, "Download", rpc_xml, id) do
     download =
       case Caretaker.TR069.RPC.Download.decode(rpc_xml) do
         {:ok, d} -> d
         _ -> %{command_key: "", file_type: "", url: "", delay_seconds: 0}
       end
 
-    # Get firmware simulator from device_state if available
-    firmware_sim = get_firmware_simulator(device_state)
-
-    # Start download if we have a firmware simulator
     {status, start_time, complete_time} =
-      case firmware_sim do
+      case get_firmware_simulator(ctx.device_state) do
         nil ->
-          # No simulator - return immediate success (status 0)
           now = DateTime.to_iso8601(DateTime.utc_now())
           {0, now, now}
 
         sim ->
-          # Start async download (status 1 = download will be performed async)
           case FirmwareSimulator.start_download(sim, %{
                  url: download.url,
                  command_key: download.command_key,
                  file_type: download.file_type
                }) do
             {:ok, :downloading} ->
-              # Async download started
+              # Download will complete asynchronously; TransferComplete follows later
               {1, "0001-01-01T00:00:00Z", "0001-01-01T00:00:00Z"}
 
             {:error, _reason} ->
-              # Failed to start, return error status
               now = DateTime.to_iso8601(DateTime.utc_now())
               {9001, now, now}
           end
@@ -614,37 +451,17 @@ defmodule Caretaker.CPE.Client do
         complete_time: complete_time
       )
 
-    with {:ok, body} <- Caretaker.TR069.RPC.DownloadResponse.encode(response),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
+    with {:ok, body} <- Caretaker.TR069.RPC.DownloadResponse.encode(response) do
+      send_response(ctx, body, id, %{
         rpc: "Download",
         command_key: download.command_key,
         status: status
       })
-
-      :ok
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp respond_to_rpc(acs_url, "Reboot", rpc_xml, _device_id, device_state, ns, timeout, id) do
-    # Parse Reboot RPC
-    _reboot =
-      case Caretaker.TR069.RPC.Reboot.decode(rpc_xml) do
-        {:ok, r} -> r
-        _ -> %{command_key: ""}
-      end
-
-    # Get firmware simulator from device_state if available
-    firmware_sim = get_firmware_simulator(device_state)
-
-    # Start reboot if we have a firmware simulator
-    case firmware_sim do
+  defp respond_to_rpc(ctx, "Reboot", _rpc_xml, id) do
+    case get_firmware_simulator(ctx.device_state) do
       nil -> :ok
       sim -> FirmwareSimulator.start_reboot(sim)
     end
@@ -652,33 +469,38 @@ defmodule Caretaker.CPE.Client do
     response = Caretaker.TR069.RPC.RebootResponse.new()
 
     with {:ok, body} <- Caretaker.TR069.RPC.RebootResponse.encode(response),
-         {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ns, id: id}),
-         {:ok, %{status: 204}} <- http_post_xml(acs_url, env, timeout) do
-      :telemetry.execute([:caretaker, :cpe_client, :rpc, :responded], %{}, %{
-        acs_url: acs_url,
-        cwmp_ns: ns,
-        rpc: "Reboot"
-      })
-
-      # Return :reboot to signal session should end
-      :reboot
-    else
-      {:ok, %{status: status}} -> {:error, {:http, status}}
-      {:error, reason} -> {:error, reason}
+         {:ok, reply, ctx} <- send_response(ctx, body, id, %{rpc: "Reboot"}) do
+      # The device is "rebooting": end the session regardless of what follows
+      {:end_session, reply, ctx}
     end
   end
 
-  defp respond_to_rpc(_acs_url, rpc, _rpc_xml, _device_id, _device_state, _ns, _timeout, _id)
-       when is_binary(rpc) do
+  defp respond_to_rpc(ctx, rpc, _rpc_xml, id) when is_binary(rpc) do
     :telemetry.execute([:caretaker, :cpe_client, :rpc, :unsupported], %{}, %{rpc: rpc})
-    :ok
+
+    fault = Caretaker.TR069.RPC.Fault.new(8000, "Method not supported")
+
+    with {:ok, body} <- Caretaker.TR069.RPC.Fault.encode(fault) do
+      send_response(ctx, body, id, %{rpc: rpc, fault: 8000})
+    end
   end
 
-  # Get firmware simulator from device_state options
-  defp get_firmware_simulator(nil), do: nil
+  # Wrap the body in an envelope, POST it, and return the ACS's reply.
+  defp send_response(ctx, body, id, meta) do
+    with {:ok, env} <- SOAP.encode_envelope(body, %{cwmp_ns: ctx.cwmp_ns, id: id}),
+         {:ok, reply, ctx} <- http_retry(ctx, &http_post_xml(&1, env)) do
+      :telemetry.execute(
+        [:caretaker, :cpe_client, :rpc, :responded],
+        %{},
+        Map.merge(%{acs_url: ctx.acs_url, cwmp_ns: ctx.cwmp_ns}, meta)
+      )
+
+      {:ok, reply, ctx}
+    end
+  end
 
   defp get_firmware_simulator(device_state) when is_pid(device_state) do
-    case Caretaker.CPE.DeviceState.get_option(device_state, :firmware_simulator) do
+    case DeviceState.get_option(device_state, :firmware_simulator) do
       {:ok, sim} -> sim
       _ -> nil
     end
@@ -686,53 +508,27 @@ defmodule Caretaker.CPE.Client do
 
   defp get_firmware_simulator(_), do: nil
 
-  # Parse ParameterNames from GetParameterValues XML
-  # Extracts the "string" elements from the ParameterNames array
-  defp parse_parameter_names(xml) do
-    case parse_rpc_fragment(xml) do
-      {:ok, parsed} ->
-        parsed
-        |> get_in(["ParameterNames", "string"])
-        |> case do
-          nil -> ["Device.DeviceInfo."]
-          list when is_list(list) -> Enum.map(list, &Map.get(&1, "string", "Device.DeviceInfo."))
-          single -> [Map.get(single, "string", "Device.DeviceInfo.")]
-        end
+  # -- RPC parsing helpers --
 
-      {:error, _} ->
-        ["Device.DeviceInfo."]
+  # Falls back to "Device.DeviceInfo." when the request carries no names.
+  defp parse_parameter_names(xml) do
+    case Caretaker.TR069.RPC.GetParameterValues.decode(xml) do
+      {:ok, %{names: [_ | _] = names}} -> names
+      _ -> ["Device.DeviceInfo."]
     end
   end
 
-  # Parse ParameterList from SetParameterValues XML
-  # Extracts name, value, and type from ParameterValueStruct elements
+  # Extracts name, value, and type from SetParameterValues ParameterValueStruct elements
   defp parse_parameter_values(xml) do
     case parse_rpc_fragment(xml) do
       {:ok, parsed} ->
         parsed
         |> get_in(["ParameterList", "ParameterValueStruct"])
-        |> case do
-          nil ->
-            []
-
-          list when is_list(list) ->
-            Enum.map(list, fn struct ->
-              %{
-                name: Map.get(struct, "Name", ""),
-                value: Map.get(struct, "Value", ""),
-                type: struct["@xsi:type"] || "xsd:string"
-              }
-            end)
-
-          single ->
-            [
-              %{
-                name: Map.get(single, "Name", ""),
-                value: Map.get(single, "Value", ""),
-                type: single["@xsi:type"] || "xsd:string"
-              }
-            ]
-        end
+        |> List.wrap()
+        |> Enum.map(fn struct ->
+          param = Caretaker.TR069.RPC.GetParameterValuesResponse.parameter_value_struct(struct)
+          %{param | type: if(param.type == "", do: "xsd:string", else: param.type)}
+        end)
 
       {:error, _} ->
         []
@@ -754,36 +550,58 @@ defmodule Caretaker.CPE.Client do
   end
 
   # -- HTTP helpers --
+  #
+  # Every request returns {:ok, %{status, body}, ctx} so that cookies and
+  # authorization learned from the response are carried into the next request.
 
-  defp http_post_xml(url, body, timeout) do
+  defp http_post_xml(ctx, body) do
     headers = [
       {"content-type", SOAP.content_type()},
       {"soapaction", ""},
-      {"user-agent", "CaretakerCPE/0.2"},
       {"accept", "text/xml"}
     ]
 
-    req = Finch.build(:post, url, headers, IO.iodata_to_binary(body))
+    http_post(ctx, headers, IO.iodata_to_binary(body))
+  end
+
+  defp http_post_empty(ctx) do
+    http_post(ctx, [{"accept", "text/xml"}], "")
+  end
+
+  defp http_post(ctx, headers, body, retried_auth? \\ false) do
+    headers = [{"user-agent", @user_agent} | headers] ++ cookie_headers(ctx) ++ auth_headers(ctx)
+    req = Finch.build(:post, ctx.acs_url, headers, body)
 
     :telemetry.execute([:caretaker, :cpe_client, :http, :request, :start], %{}, %{
       method: :post,
-      url: url
+      url: ctx.acs_url
     })
 
-    case Finch.request(req, Caretaker.Finch, receive_timeout: timeout) do
-      {:ok, %Finch.Response{status: status, body: resp_body}} ->
+    case Finch.request(req, HTTP.finch(), receive_timeout: ctx.timeout) do
+      {:ok, %Finch.Response{status: status, body: resp_body, headers: resp_headers}} ->
         :telemetry.execute([:caretaker, :cpe_client, :http, :request, :stop], %{}, %{
           method: :post,
-          url: url,
+          url: ctx.acs_url,
           status: status
         })
 
-        {:ok, %{status: status, body: resp_body}}
+        ctx = store_cookies(ctx, resp_headers)
+
+        case {status, ctx.credentials, retried_auth?} do
+          {401, %{} = creds, false} ->
+            case authorization_for(resp_headers, creds, ctx.acs_url) do
+              nil -> {:ok, %{status: status, body: resp_body}, ctx}
+              auth -> http_post(%{ctx | authorization: auth}, headers_without_auth(headers), body, true)
+            end
+
+          _ ->
+            {:ok, %{status: status, body: resp_body}, ctx}
+        end
 
       {:error, reason} ->
         :telemetry.execute([:caretaker, :cpe_client, :http, :request, :stop], %{}, %{
           method: :post,
-          url: url,
+          url: ctx.acs_url,
           error: reason
         })
 
@@ -791,103 +609,86 @@ defmodule Caretaker.CPE.Client do
     end
   end
 
-  defp http_post_empty(url, timeout) do
-    headers = [
-      {"user-agent", "CaretakerCPE/0.2"},
-      {"accept", "text/xml"}
-    ]
+  defp headers_without_auth(headers) do
+    Enum.reject(headers, fn {k, _} -> k in ["authorization", "cookie", "user-agent"] end)
+  end
 
-    req = Finch.build(:post, url, headers)
+  defp cookie_headers(%{cookies: cookies}) when map_size(cookies) == 0, do: []
 
-    :telemetry.execute([:caretaker, :cpe_client, :http, :request, :start], %{}, %{
-      method: :post,
-      url: url
-    })
+  defp cookie_headers(%{cookies: cookies}) do
+    [{"cookie", Enum.map_join(cookies, "; ", fn {k, v} -> k <> "=" <> v end)}]
+  end
 
-    case Finch.request(req, Caretaker.Finch, receive_timeout: timeout) do
-      {:ok, %Finch.Response{status: status, body: resp_body}} ->
-        :telemetry.execute([:caretaker, :cpe_client, :http, :request, :stop], %{}, %{
-          method: :post,
-          url: url,
-          status: status
-        })
+  defp auth_headers(%{authorization: nil}), do: []
+  defp auth_headers(%{authorization: auth}), do: [{"authorization", auth}]
 
-        {:ok, %{status: status, body: resp_body}}
+  defp store_cookies(ctx, resp_headers) do
+    cookies =
+      resp_headers
+      |> Enum.filter(fn {k, _} -> String.downcase(k) == "set-cookie" end)
+      |> Enum.reduce(ctx.cookies, fn {_, v}, acc ->
+        case v |> String.split(";", parts: 2) |> hd() |> String.split("=", parts: 2) do
+          [name, value] -> Map.put(acc, String.trim(name), String.trim(value))
+          _ -> acc
+        end
+      end)
 
-      {:error, reason} ->
-        :telemetry.execute([:caretaker, :cpe_client, :http, :request, :stop], %{}, %{
-          method: :post,
-          url: url,
-          error: reason
-        })
+    %{ctx | cookies: cookies}
+  end
 
-        {:error, reason}
+  defp authorization_for(resp_headers, creds, url) do
+    challenge =
+      Enum.find_value(resp_headers, fn {k, v} ->
+        if String.downcase(k) == "www-authenticate", do: v
+      end)
+
+    case challenge do
+      nil -> nil
+      value -> Caretaker.HTTP.Auth.authorization(value, creds, :post, URI.parse(url).path || "/")
     end
   end
 
   # -- Retry helpers --
 
-  defp http_retry(fun, max_retries, base_ms) when is_function(fun, 0) do
-    do_retry(fun, 0, max_retries, base_ms)
-  end
-
-  defp do_retry(fun, attempt, max_retries, base_ms) do
-    case fun.() do
-      {:ok, %{status: status}} = ok when status in 200..299 ->
+  defp http_retry(ctx, fun, attempt \\ 0) when is_function(fun, 1) do
+    case fun.(ctx) do
+      {:ok, %{status: status}, _ctx} = ok when status in 200..299 ->
         ok
 
-      {:ok, %{status: status}} when status in [408] or status >= 500 ->
-        if attempt < max_retries do
-          backoff = trunc(:math.pow(2, attempt) * base_ms)
-          jitter = if backoff > 0, do: :rand.uniform(backoff), else: 0
-
-          :telemetry.execute([:caretaker, :cpe_client, :retry], %{}, %{
-            attempt: attempt + 1,
-            backoff_ms: jitter
-          })
-
-          Process.sleep(jitter)
-          do_retry(fun, attempt + 1, max_retries, base_ms)
+      {:ok, %{status: status}, ctx} when status == 408 or status >= 500 ->
+        if attempt < ctx.max_retries do
+          backoff(ctx, attempt)
+          http_retry(ctx, fun, attempt + 1)
         else
           {:error, {:http, :max_retries_exceeded, status}}
         end
 
-      {:ok, %{status: status}} ->
+      {:ok, %{status: status}, _ctx} ->
         {:error, {:http, status}}
 
       {:error, reason} ->
-        if attempt < max_retries do
-          backoff = trunc(:math.pow(2, attempt) * base_ms)
-          jitter = if backoff > 0, do: :rand.uniform(backoff), else: 0
-
-          :telemetry.execute([:caretaker, :cpe_client, :retry], %{}, %{
-            attempt: attempt + 1,
-            backoff_ms: jitter
-          })
-
-          Process.sleep(jitter)
-          do_retry(fun, attempt + 1, max_retries, base_ms)
+        if attempt < ctx.max_retries do
+          backoff(ctx, attempt)
+          http_retry(ctx, fun, attempt + 1)
         else
           {:error, reason}
         end
     end
   end
 
-  defp gen_id do
-    Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
+  defp backoff(ctx, attempt) do
+    base = trunc(:math.pow(2, attempt) * ctx.backoff_base)
+    jitter = if base > 0, do: :rand.uniform(base), else: 0
+
+    :telemetry.execute([:caretaker, :cpe_client, :retry], %{}, %{
+      attempt: attempt + 1,
+      backoff_ms: jitter
+    })
+
+    Process.sleep(jitter)
   end
 
-  defp ensure_finch_started do
-    case Process.whereis(Caretaker.Finch) do
-      nil ->
-        case Supervisor.start_link([{Finch, name: Caretaker.Finch}], strategy: :one_for_one) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _}} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      _pid ->
-        :ok
-    end
+  defp gen_id do
+    Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
   end
 end

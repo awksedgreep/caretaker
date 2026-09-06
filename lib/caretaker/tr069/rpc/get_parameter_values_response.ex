@@ -1,6 +1,6 @@
 defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
   @moduledoc """
-  Decoder for GetParameterValuesResponse.
+  Encoder/decoder for GetParameterValuesResponse.
   """
 
   @type param :: %{name: String.t(), value: String.t(), type: String.t()}
@@ -67,12 +67,7 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
         list =
           pv
           |> List.wrap()
-          |> Enum.map(fn item ->
-            name = item["Name"] || ""
-            val = get_in(item, ["Value", "#text"]) || item["Value"] || ""
-            typ = get_in(item, ["Value", "@xsi:type"]) || ""
-            %{name: name, value: val, type: typ}
-          end)
+          |> Enum.map(&parameter_value_struct/1)
 
         res = {:ok, %{parameters: list}}
 
@@ -88,4 +83,28 @@ defmodule Caretaker.TR069.RPC.GetParameterValuesResponse do
       e -> {:error, {:decode_failed, e}}
     end
   end
+
+  @doc """
+  Normalize a parsed `ParameterValueStruct` node into `%{name, value, type}`.
+
+  Handles `Value` elements with text, with only an `xsi:type` attribute (empty
+  value), and bare text without attributes.
+  """
+  @spec parameter_value_struct(map()) :: param()
+  def parameter_value_struct(item) when is_map(item) do
+    %{
+      name: text(item["Name"]),
+      value: text(item["Value"]),
+      type: value_type(item["Value"])
+    }
+  end
+
+  @doc "Extract the text of a parsed element, tolerating attribute maps."
+  @spec text(term()) :: String.t()
+  def text(%{"#text" => v}) when is_binary(v), do: v
+  def text(v) when is_binary(v), do: v
+  def text(_), do: ""
+
+  defp value_type(%{"@xsi:type" => t}) when is_binary(t), do: t
+  defp value_type(_), do: ""
 end

@@ -352,23 +352,12 @@ defmodule Caretaker.CPE.FirmwareSimulator do
   end
 
   defp fetch_url(url, timeout) do
-    # Ensure Finch is started
-    case Process.whereis(Caretaker.Finch) do
-      nil ->
-        case Supervisor.start_link([{Finch, name: Caretaker.Finch}], strategy: :one_for_one) do
-          {:ok, _} -> :ok
-          {:error, {:already_started, _}} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      _ ->
-        :ok
-    end
+    _ = Caretaker.HTTP.ensure_finch()
 
     # Make HEAD request to validate URL
     req = Finch.build(:head, url)
 
-    case Finch.request(req, Caretaker.Finch, receive_timeout: timeout) do
+    case Finch.request(req, Caretaker.HTTP.finch(), receive_timeout: timeout) do
       {:ok, %Finch.Response{status: status}} when status in 200..299 ->
         :ok
 

@@ -41,6 +41,9 @@ defmodule Caretaker.PubSub do
 
   @impl true
   def handle_call({:subscribe, topic, pid}, _from, state) do
+    # Monitor the subscriber so its entry is removed automatically when it dies,
+    # preventing dead pids from accumulating across the topic map.
+    Process.monitor(pid)
     subs = Map.get(state, topic, MapSet.new()) |> MapSet.put(pid)
     {:reply, :ok, Map.put(state, topic, subs)}
   end
@@ -55,6 +58,14 @@ defmodule Caretaker.PubSub do
     for pid <- Map.get(state, topic, MapSet.new()), do: send(pid, {:pubsub, topic, message})
     {:noreply, state}
   end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    state = Map.new(state, fn {topic, subs} -> {topic, MapSet.delete(subs, pid)} end)
+    {:noreply, state}
+  end
+
+  def handle_info(_msg, state), do: {:noreply, state}
 
   @spec topic_tr069_inform() :: topic()
   def topic_tr069_inform, do: :tr069_inform

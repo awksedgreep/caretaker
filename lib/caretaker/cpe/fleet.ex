@@ -181,6 +181,27 @@ defmodule Caretaker.CPE.Fleet do
     GenServer.call(server, {:add_device, opts})
   end
 
+  @doc """
+  Run one CWMP session for a device against the fleet's `acs_url`.
+
+  The session runs in a background task using `Caretaker.CPE.Client`; the device
+  is marked `:connecting`, then `:connected` with its session count incremented
+  when the session completes. Requires a Finch pool (started on demand).
+  """
+  @spec run_session(GenServer.server(), String.t(), [String.t()]) :: :ok | {:error, :not_found}
+  def run_session(server, serial_number, events \\ ["2 PERIODIC"]) do
+    GenServer.call(server, {:run_session, serial_number, events})
+  end
+
+  @doc """
+  Run a CWMP session for every spawned device against the fleet's `acs_url`.
+  Returns the number of sessions started.
+  """
+  @spec run_all_sessions(GenServer.server(), [String.t()]) :: {:ok, non_neg_integer()}
+  def run_all_sessions(server, events \\ ["2 PERIODIC"]) do
+    GenServer.call(server, {:run_all_sessions, events})
+  end
+
   # ============================================================================
   # GenServer Callbacks
   # ============================================================================
@@ -454,6 +475,25 @@ defmodule Caretaker.CPE.Fleet do
   end
 
   @impl true
+  def handle_call({:run_session, serial_number, events}, _from, state) do
+    case Map.get(state.devices, serial_number) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      device ->
+        {:reply, :ok, %{state | devices: Map.put(state.devices, serial_number, start_session(state, device, events))}}
+    end
+  end
+
+  @impl true
+  def handle_call({:run_all_sessions, events}, _from, state) do
+    new_devices =
+      Map.new(state.devices, fn {sn, device} -> {sn, start_session(state, device, events)} end)
+
+    {:reply, {:ok, map_size(new_devices)}, %{state | devices: new_devices}}
+  end
+
+  @impl true
   def handle_info(:auto_spawn, state) do
     memory_before = :erlang.memory(:total)
     new_state = do_spawn_devices(%{state | memory_before: memory_before})
@@ -474,10 +514,50 @@ defmodule Caretaker.CPE.Fleet do
         {:noreply, state}
 
       device ->
-        new_device = %{device | sessions: device.sessions + 1, state: :connected}
+        new_device = %{
+          device
+          | sessions: device.sessions + 1,
+            state: :connected,
+            last_inform: DateTime.utc_now()
+        }
+
         new_devices = Map.put(state.devices, serial_number, new_device)
         {:noreply, %{state | devices: new_devices, total_sessions: state.total_sessions + 1}}
     end
+  end
+
+  @impl true
+  def handle_info({:device_session_failed, serial_number, reason}, state) do
+    Logger.debug("Fleet device #{serial_number} session failed: #{inspect(reason)}")
+
+    case Map.get(state.devices, serial_number) do
+      nil ->
+        {:noreply, state}
+
+      device ->
+        new_devices = Map.put(state.devices, serial_number, %{device | state: :disconnected})
+        {:noreply, %{state | devices: new_devices}}
+    end
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
+    # A device's DeviceState or DynamicBehavior went down: mark it stopped so
+    # one crashing device never takes the whole fleet with it.
+    new_devices =
+      Map.new(state.devices, fn {sn, device} ->
+        if device.device_state == pid or device.dynamic_behavior == pid do
+          if reason not in [:normal, :shutdown] do
+            Logger.warning("Fleet device #{sn} process went down: #{inspect(reason)}")
+          end
+
+          {sn, %{device | state: :stopped, device_state: nil, dynamic_behavior: nil}}
+        else
+          {sn, device}
+        end
+      end)
+
+    {:noreply, %{state | devices: new_devices}}
   end
 
   @impl true
@@ -535,12 +615,16 @@ defmodule Caretaker.CPE.Fleet do
       serial_number: serial_number
     }
 
-    # Start DeviceState
+    # Start DeviceState, then unlink and monitor it so a device crash is
+    # observed (via :DOWN) without propagating to the fleet.
     {:ok, device_state} =
       DeviceState.start_link(
         device_id: device_id,
         params: params
       )
+
+    Process.unlink(device_state)
+    Process.monitor(device_state)
 
     # Start DynamicBehavior if configured
     dynamic_behavior =
@@ -550,6 +634,9 @@ defmodule Caretaker.CPE.Fleet do
             device_state: device_state,
             behaviors: state.behaviors
           )
+
+        Process.unlink(behavior)
+        Process.monitor(behavior)
 
         # Link behavior to device state
         DeviceState.set_option(device_state, :dynamic_behavior, behavior)
@@ -578,6 +665,40 @@ defmodule Caretaker.CPE.Fleet do
       last_inform: nil,
       spawned_at: DateTime.utc_now()
     }
+  end
+
+  # Kick off a background CWMP session for a device. The task is unlinked so a
+  # session failure never propagates to the fleet; it reports back by message.
+  defp start_session(_state, %{device_state: nil} = device, _events), do: device
+
+  defp start_session(state, device, events) do
+    fleet = self()
+    sn = device.serial_number
+    acs_url = state.acs_url
+    device_state = device.device_state
+
+    device_id = %{
+      manufacturer: DeviceState.get(device_state, "Device.DeviceInfo.Manufacturer") || "Caretaker",
+      oui: state.oui_prefix,
+      product_class: state.product_class,
+      serial_number: sn
+    }
+
+    spawn(fn ->
+      result =
+        Caretaker.CPE.Client.run_session(acs_url,
+          device_id: device_id,
+          device_state: device_state,
+          events: events
+        )
+
+      case result do
+        {:ok, _} -> send(fleet, {:device_session_complete, sn})
+        {:error, reason} -> send(fleet, {:device_session_failed, sn, reason})
+      end
+    end)
+
+    %{device | state: :connecting}
   end
 
   defp stop_device_processes(device) do
@@ -623,19 +744,10 @@ defmodule Caretaker.CPE.Fleet do
   defp get_delay(min..max//_step), do: Enum.random(min..max)
   defp get_delay(_), do: 100
 
-  defp load_profile_params(:fiber_ont) do
-    case File.read("priv/profiles/fiber_ont.json") do
-      {:ok, json} -> Jason.decode!(json)
-      _ -> default_params("Fiber ONT")
-    end
-  end
+  defp load_profile_params(:fiber_ont), do: load_profile_file("fiber_ont.json", "Fiber ONT")
 
-  defp load_profile_params(:cable_modem) do
-    case File.read("priv/profiles/cable_modem.json") do
-      {:ok, json} -> Jason.decode!(json)
-      _ -> default_params("Cable Modem")
-    end
-  end
+  defp load_profile_params(:cable_modem),
+    do: load_profile_file("cable_modem.json", "Cable Modem")
 
   defp load_profile_params(:router) do
     default_params("Router")
@@ -644,6 +756,15 @@ defmodule Caretaker.CPE.Fleet do
   defp load_profile_params(%{} = params), do: params
 
   defp load_profile_params(_), do: default_params("Generic CPE")
+
+  defp load_profile_file(filename, description) do
+    path = Application.app_dir(:caretaker, ["priv", "profiles", filename])
+
+    case File.read(path) do
+      {:ok, json} -> Jason.decode!(json)
+      _ -> default_params(description)
+    end
+  end
 
   defp default_params(description) do
     %{

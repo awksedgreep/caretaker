@@ -92,7 +92,10 @@ defmodule Caretaker.CPE.Simulation.RouterResources do
         :exhausted -> 95
       end
 
+    # Hard-bound the jitter (|delta| <= 8) so each profile stays in its band:
+    # idle 0..15, normal 15..40, high >= 50, exhausted >= 85.
     variation = :rand.normal() * 5
+    variation = max(-8.0, min(8.0, variation))
     new_value = base_cpu + variation
 
     round(max(0, min(100, new_value)))
@@ -112,7 +115,11 @@ defmodule Caretaker.CPE.Simulation.RouterResources do
         :exhausted -> 0.05
       end
 
-    variation = :rand.normal() * 0.05
+    # Small, hard-bounded jitter (|delta| <= 0.06) so every load profile stays
+    # inside its expected band: idle > 0.8, normal 0.3..0.7, high < 0.4,
+    # exhausted < 0.15. An unbounded Gaussian tail would occasionally break these.
+    variation = :rand.normal() * 0.03
+    variation = max(-0.06, min(0.06, variation))
     free_pct = max(0.01, min(0.95, base_free_pct + variation))
     free = round(total * free_pct)
 

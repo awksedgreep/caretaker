@@ -292,7 +292,7 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
   describe "Download RPC handler integration" do
     setup do
       # Use unique port for each test
-      port = (4080 + System.unique_integer([:positive])) |> rem(100)
+      port = 4080 + rem(System.unique_integer([:positive]), 100)
 
       {:ok, sup_pid} =
         Supervisor.start_link(
@@ -387,7 +387,16 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
 
       {:ok, download_body} = Caretaker.TR069.RPC.Download.encode(download)
 
-      # Start session in a task so we can queue Download after GPV is sent
+      # Queue the Download ahead of the session. The ACS delivers queued RPCs
+      # by piggybacking them on the HTTP response to each CPE message, so the
+      # client handles both the auto-queued GetParameterValues and the Download
+      # within one session (order-independent here).
+      :ok =
+        Caretaker.ACS.Session.queue_command(
+          {device_id.oui, device_id.product_class, device_id.serial_number},
+          download_body
+        )
+
       session_task =
         Task.async(fn ->
           Client.run_session(acs_url,
@@ -395,16 +404,6 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
             device_state: state
           )
         end)
-
-      # Wait for the auto-queued GetParameterValues response
-      assert_receive {:rpc_response, "GetParameterValues", _}, 2000
-
-      # Now queue the Download RPC (session should still be polling)
-      :ok =
-        Caretaker.ACS.Session.queue_command(
-          {device_id.oui, device_id.product_class, device_id.serial_number},
-          download_body
-        )
 
       # Wait for Download response
       assert_receive {:rpc_response, "Download", meta}, 2000
@@ -479,7 +478,14 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
       reboot = Caretaker.TR069.RPC.Reboot.new(command_key: "reboot-123")
       {:ok, reboot_body} = Caretaker.TR069.RPC.Reboot.encode(reboot)
 
-      # Start session in a task
+      # Queue the Reboot ahead of the session; the ACS piggybacks it onto a
+      # session response. Reboot ends the session, so it must be handled.
+      :ok =
+        Caretaker.ACS.Session.queue_command(
+          {device_id.oui, device_id.product_class, device_id.serial_number},
+          reboot_body
+        )
+
       session_task =
         Task.async(fn ->
           Client.run_session(acs_url,
@@ -487,16 +493,6 @@ defmodule Caretaker.CPE.FirmwareSimulatorTest do
             device_state: state
           )
         end)
-
-      # Wait for GPV response first
-      assert_receive {:rpc_response, "GetParameterValues", _}, 2000
-
-      # Queue Reboot
-      :ok =
-        Caretaker.ACS.Session.queue_command(
-          {device_id.oui, device_id.product_class, device_id.serial_number},
-          reboot_body
-        )
 
       # Wait for Reboot response
       assert_receive {:rpc_response, "Reboot", meta}, 2000

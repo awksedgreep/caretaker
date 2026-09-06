@@ -12,7 +12,7 @@ defmodule Caretaker.ACS.TR181IntegrationTest do
     :ok
   end
 
-  test "Inform -> Store GPV response into TR-181 store and 204" do
+  test "Inform -> Store GPV response into TR-181 store, ACS sends next RPC" do
     # 1) Inform
     xml = File.read!("test/fixtures/tr069/inform.xml")
     conn1 = conn(:post, "/cwmp", xml)
@@ -34,7 +34,11 @@ defmodule Caretaker.ACS.TR181IntegrationTest do
 
     conn2 = conn(:post, "/cwmp", IO.iodata_to_binary(envelope))
     conn2 = Caretaker.ACS.Server.call(conn2, Caretaker.ACS.Server.init([]))
-    assert conn2.status == 204
+
+    # The ACS piggybacks the next queued RPC (the GetParameterValues it queued
+    # on Inform) onto the HTTP response to the CPE's GPV response, per TR-069.
+    assert conn2.status == 200
+    assert conn2.resp_body =~ "<cwmp:GetParameterValues>"
 
     # 3) Verify stored model
     # Session bound to default 127.0.0.1; fetch dev_key via session API

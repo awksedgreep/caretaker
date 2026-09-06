@@ -265,13 +265,15 @@ defmodule Caretaker.CPE.RPCSuiteTest do
 
   describe "DeviceState object management" do
     test "add_object_instance creates new instance", ctx do
+      # The fiber_ont profile already defines Device.IP.Interface.1 and .2,
+      # so the new instance must not collide with them.
       {:ok, instance} = DeviceState.add_object_instance(ctx.device_state, "Device.IP.Interface.")
 
-      assert instance == 1
+      assert instance == 3
+      assert DeviceState.get(ctx.device_state, "Device.IP.Interface.1") != nil
 
-      # Get next instance number should be 2
       next = DeviceState.get_next_instance_number(ctx.device_state, "Device.IP.Interface.")
-      assert next == 2
+      assert next == 4
     end
 
     test "add_object_instance increments instance numbers", ctx do

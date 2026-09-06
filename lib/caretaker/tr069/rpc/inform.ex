@@ -68,7 +68,7 @@ defmodule Caretaker.TR069.RPC.Inform do
         "MaxEnvelopes" => Integer.to_string(inform.max_envelopes),
         "CurrentTime" => to_iso8601(inform.current_time),
         "RetryCount" => Integer.to_string(inform.retry_count),
-        "ParameterList" => %{}
+        "ParameterList" => encode_parameter_list(inform.parameter_list)
       }
     }
 
@@ -91,7 +91,9 @@ defmodule Caretaker.TR069.RPC.Inform do
 
     try do
       # Wrap to stabilize prefixes; tolerate cwmp or no-prefix keys
-      wrapped = "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\">" <> xml <> "</root>"
+      wrapped =
+        "<root xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">" <>
+          xml <> "</root>"
 
       with {:ok, parsed} <- Lather.Xml.Parser.parse(wrapped) do
         root = parsed["root"] || %{}
@@ -116,6 +118,7 @@ defmodule Caretaker.TR069.RPC.Inform do
         max_env = to_int(node["MaxEnvelopes"] || "1", 1)
         retry_count = to_int(node["RetryCount"] || "0", 0)
         current_time = node["CurrentTime"] || ""
+        parameter_list = decode_parameter_list(node["ParameterList"])
 
         result =
           {:ok,
@@ -125,7 +128,7 @@ defmodule Caretaker.TR069.RPC.Inform do
              max_envelopes: max_env,
              current_time: current_time,
              retry_count: retry_count,
-             parameter_list: []
+             parameter_list: parameter_list
            }}
 
         duration = System.monotonic_time() - start
@@ -148,6 +151,44 @@ defmodule Caretaker.TR069.RPC.Inform do
         {:error, {:decode_failed, e}}
     end
   end
+
+  # ParameterList entries may be %{name, value, type} maps, {name, value}
+  # tuples, or keyword-style {atom, value} pairs.
+  defp encode_parameter_list([]), do: %{}
+
+  # A list of single-key maps renders as repeated sibling elements in Lather.
+  defp encode_parameter_list(list) when is_list(list) do
+    Enum.map(list, fn entry ->
+      {name, value, type} = normalize_param(entry)
+
+      %{
+        "ParameterValueStruct" => %{
+          "Name" => name,
+          "Value" => %{"@xsi:type" => type, "#text" => value}
+        }
+      }
+    end)
+  end
+
+  defp encode_parameter_list(_), do: %{}
+
+  defp normalize_param(%{name: n, value: v} = p),
+    do: {to_string(n), to_string(v), Map.get(p, :type) || infer_type(v)}
+
+  defp normalize_param({n, v}), do: {to_string(n), to_string(v), infer_type(v)}
+
+  defp infer_type(v) when is_integer(v), do: "xsd:int"
+  defp infer_type(v) when is_boolean(v), do: "xsd:boolean"
+  defp infer_type(v) when is_float(v), do: "xsd:double"
+  defp infer_type(_), do: "xsd:string"
+
+  defp decode_parameter_list(%{"ParameterValueStruct" => pv}) do
+    pv
+    |> List.wrap()
+    |> Enum.map(&Caretaker.TR069.RPC.GetParameterValuesResponse.parameter_value_struct/1)
+  end
+
+  defp decode_parameter_list(_), do: []
 
   defp event_code(%{"EventCode" => v}) when is_binary(v), do: v
   defp event_code(%{"EventCode" => %{"#text" => v}}), do: v

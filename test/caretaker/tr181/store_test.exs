@@ -1,5 +1,5 @@
 defmodule Caretaker.TR181.StoreDeepMergeTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   alias Caretaker.TR181.Store
   alias Caretaker.TR181.Schema
 

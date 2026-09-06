@@ -203,6 +203,11 @@ defmodule Caretaker.USP.Controller do
     GenServer.call(controller, {:register_pending, agent_id, msg_id, caller})
   end
 
+  # Deliver a reply to whatever registered a pending request, tolerating both a
+  # GenServer `from` tuple and a bare pid.
+  defp reply_pending({pid, _tag} = from, reply) when is_pid(pid), do: GenServer.reply(from, reply)
+  defp reply_pending(pid, reply) when is_pid(pid), do: send(pid, reply)
+
   # ============================================================================
   # GenServer Callbacks
   # ============================================================================
@@ -380,7 +385,7 @@ defmodule Caretaker.USP.Controller do
         {:noreply, state}
 
       caller ->
-        GenServer.reply(caller, {:error, :timeout})
+        reply_pending(caller, {:error, :timeout})
         new_state = update_in(state.agents[agent_id].pending_requests, &Map.delete(&1, msg_id))
         {:noreply, new_state}
     end
@@ -414,8 +419,8 @@ defmodule Caretaker.USP.Controller do
       {:register, register} ->
         handle_register(agent_id, register, msg_id, state)
 
-      {:deregister, _deregister} ->
-        handle_deregister(agent_id, msg_id, state)
+      {:deregister, deregister} ->
+        handle_deregister(agent_id, deregister, msg_id, state)
 
       {:notify, notify} ->
         handle_notify(agent_id, notify, msg_id, state)
@@ -434,7 +439,7 @@ defmodule Caretaker.USP.Controller do
         {:ok, nil, state}
 
       caller ->
-        GenServer.reply(caller, {:ok, msg})
+        reply_pending(caller, {:ok, msg})
         new_state = update_in(state.agents[agent_id].pending_requests, &Map.delete(&1, msg_id))
         {:ok, nil, new_state}
     end
@@ -444,7 +449,7 @@ defmodule Caretaker.USP.Controller do
   # Request Handlers
   # ============================================================================
 
-  defp handle_register(agent_id, _register, msg_id, state) do
+  defp handle_register(agent_id, register, msg_id, state) do
     Logger.info("Agent registered: #{agent_id}")
     Telemetry.emit_agent_connected(agent_id)
 
@@ -470,14 +475,15 @@ defmodule Caretaker.USP.Controller do
              resp_type:
                {:register_resp,
                 %RegisterResp{
-                  registered_path_results: [
-                    %RegisteredPathResult{
-                      requested_path: "Device.",
-                      oper_status: %OperationStatus{
-                        oper_status: {:oper_success, %OperationSuccess{}}
+                  registered_path_results:
+                    Enum.map(register_paths(register), fn path ->
+                      %RegisteredPathResult{
+                        requested_path: path,
+                        oper_status: %OperationStatus{
+                          oper_status: {:oper_success, %OperationSuccess{}}
+                        }
                       }
-                    }
-                  ]
+                    end)
                 }}
            }}
       }
@@ -486,7 +492,7 @@ defmodule Caretaker.USP.Controller do
     {:ok, response, new_state}
   end
 
-  defp handle_deregister(agent_id, msg_id, state) do
+  defp handle_deregister(agent_id, deregister, msg_id, state) do
     Logger.info("Agent deregistered: #{agent_id}")
     Telemetry.emit_agent_disconnected(agent_id)
 
@@ -512,14 +518,15 @@ defmodule Caretaker.USP.Controller do
              resp_type:
                {:deregister_resp,
                 %DeregisterResp{
-                  deregistered_path_results: [
-                    %DeregisteredPathResult{
-                      requested_path: "Device.",
-                      oper_status: %OperationStatus{
-                        oper_status: {:oper_success, %OperationSuccess{}}
+                  deregistered_path_results:
+                    Enum.map(deregister_paths(deregister), fn path ->
+                      %DeregisteredPathResult{
+                        requested_path: path,
+                        oper_status: %OperationStatus{
+                          oper_status: {:oper_success, %OperationSuccess{}}
+                        }
                       }
-                    }
-                  ]
+                    end)
                 }}
            }}
       }
@@ -571,6 +578,14 @@ defmodule Caretaker.USP.Controller do
   # Helpers
   # ============================================================================
 
+  defp register_paths(%{reg_paths: paths}) when is_list(paths) and paths != [],
+    do: Enum.map(paths, & &1.path)
+
+  defp register_paths(_), do: ["Device."]
+
+  defp deregister_paths(%{paths: paths}) when is_list(paths) and paths != [], do: paths
+  defp deregister_paths(_), do: ["Device."]
+
   defp register_agent(agent_id, state) do
     session = %{
       agent_id: agent_id,
@@ -592,7 +607,7 @@ defmodule Caretaker.USP.Controller do
       session ->
         # Reply with error to all pending requests
         Enum.each(session.pending_requests, fn {_msg_id, caller} ->
-          GenServer.reply(caller, {:error, :agent_disconnected})
+          reply_pending(caller, {:error, :agent_disconnected})
         end)
 
         update_in(state.agents, &Map.delete(&1, agent_id))
@@ -629,6 +644,14 @@ defmodule Caretaker.USP.Controller do
         new_session = %{session | command_queue: new_queue}
         put_in(state.agents[agent_id], new_session)
     end
+  end
+
+  # The Controller is a message router with no direct wire to an agent. Without a
+  # transport, synchronous get/set/etc. cannot be delivered, so fail fast rather
+  # than blocking the caller for the full 30s timeout. Use the transport modules
+  # (WebSocket.Server / MQTT.Controller) or the async queue_get/next_command pair.
+  defp send_request_to_agent(_agent_id, _msg, _from, %{transport: nil} = state) do
+    {:reply, {:error, :no_transport}, state}
   end
 
   defp send_request_to_agent(agent_id, msg, from, state) do

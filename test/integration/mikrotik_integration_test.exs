@@ -214,9 +214,9 @@ defmodule Caretaker.Integration.MikrotikTest do
       # Verify script
       assert script != ""
       assert String.contains?(script, "/ip firewall filter add")
-      assert String.contains?(script, "chain=input")
-      assert String.contains?(script, "protocol=tcp")
-      assert String.contains?(script, "dst-port=22")
+      assert String.contains?(script, ~s(chain="input"))
+      assert String.contains?(script, ~s(protocol="tcp"))
+      assert String.contains?(script, ~s(dst-port="22"))
 
       GenServer.stop(state)
     end

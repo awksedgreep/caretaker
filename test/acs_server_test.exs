@@ -1,5 +1,5 @@
 defmodule Caretaker.ACS.ServerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Plug.Test
 
   test "POST /cwmp with empty body responds 204 and text/plain" do
@@ -69,6 +69,23 @@ defmodule Caretaker.ACS.ServerTest do
     conn = conn(:post, "/cwmp", IO.iodata_to_binary(env))
     conn = Caretaker.ACS.Server.call(conn, Caretaker.ACS.Server.init([]))
     assert conn.status == 400
+  end
+
+  test "error responses carry a parseable CWMP SOAP Fault body" do
+    conn =
+      conn(:post, "/cwmp", "<not-soap/>")
+      |> Plug.Conn.put_req_header("content-type", "text/xml")
+
+    conn = Caretaker.ACS.Server.call(conn, Caretaker.ACS.Server.init([]))
+
+    assert conn.status == 400
+    assert Plug.Conn.get_resp_header(conn, "content-type") == [Caretaker.CWMP.SOAP.content_type()]
+
+    assert {:ok, %{body: %{rpc: "Fault", xml: fault_xml}}} =
+             Caretaker.CWMP.SOAP.decode_envelope(conn.resp_body)
+
+    assert {:ok, %Caretaker.TR069.RPC.Fault{code: "8005"}} =
+             Caretaker.TR069.RPC.Fault.decode(fault_xml)
   end
 
   test "child_spec returns Bandit with proper defaults and overrides" do
