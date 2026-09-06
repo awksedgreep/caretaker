@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.4.0 - 2026-09-06
 
 ### Added
 - MQTT consolidated on `mqttx` (client + broker); `nipper` and `tortoise311`
