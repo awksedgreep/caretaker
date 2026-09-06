@@ -83,15 +83,15 @@ defmodule Caretaker.ACS.Server do
       {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "TransferComplete", xml: tc_xml}}} ->
         handle_transfer_complete(conn, id, ns, tc_xml)
 
-      {:ok, %{body: %{rpc: "GetParameterValuesResponse", xml: body_xml, node: node}}} ->
-        handle_gpv_response(conn, caller_key, body_xml, node)
+      {:ok, %{header: %{id: id}, body: %{rpc: "GetParameterValuesResponse", xml: body_xml, node: node}}} ->
+        handle_gpv_response(conn, caller_key, id, body_xml, node)
 
-      {:ok, %{body: %{rpc: "Fault", xml: fault_xml}}} ->
-        handle_fault(conn, caller_key, fault_xml)
+      {:ok, %{header: %{id: id}, body: %{rpc: "Fault", xml: fault_xml}}} ->
+        handle_fault(conn, caller_key, id, fault_xml)
 
-      {:ok, %{body: %{rpc: rpc}}} when is_binary(rpc) ->
+      {:ok, %{header: %{id: id}, body: %{rpc: rpc}}} when is_binary(rpc) ->
         if String.ends_with?(rpc, "Response") do
-          acknowledge_response(conn, caller_key, rpc)
+          acknowledge_response(conn, caller_key, id, rpc)
         else
           soap_fault(conn, 400, "8005", "Request could not be processed")
         end
@@ -141,17 +141,20 @@ defmodule Caretaker.ACS.Server do
     end
   end
 
-  defp handle_gpv_response(conn, caller_key, body_xml, node) do
+  defp handle_gpv_response(conn, caller_key, id, body_xml, node) do
     dev_key = session_running?() && Session.device_key_for_caller(caller_key)
+
+    params =
+      case Caretaker.TR069.RPC.GetParameterValuesResponse.decode(body_xml) do
+        {:ok, %{parameters: p}} -> p
+        _ -> extract_gpv_params_from_node(node)
+      end
+
+    # Complete any task correlated to this response's cwmp:ID with its values.
+    notify_tasks(:complete, id, %{parameters: params})
 
     case dev_key do
       {oui, pc, sn} ->
-        params =
-          case Caretaker.TR069.RPC.GetParameterValuesResponse.decode(body_xml) do
-            {:ok, %{parameters: p}} -> p
-            _ -> extract_gpv_params_from_node(node)
-          end
-
         case Process.whereis(Caretaker.TR181.Store) do
           nil ->
             next_or_204(conn, caller_key)
@@ -181,7 +184,7 @@ defmodule Caretaker.ACS.Server do
     end
   end
 
-  defp handle_fault(conn, caller_key, fault_xml) do
+  defp handle_fault(conn, caller_key, id, fault_xml) do
     {code, string} =
       case fault_xml && Caretaker.TR069.RPC.Fault.decode(fault_xml) do
         {:ok, %{code: c, string: s}} -> {c, s}
@@ -195,16 +198,19 @@ defmodule Caretaker.ACS.Server do
       fault_string: string
     })
 
+    notify_tasks(:fault, id, %{code: code, message: string})
     next_or_204(conn, caller_key)
   end
 
-  defp acknowledge_response(conn, caller_key, rpc) do
+  defp acknowledge_response(conn, caller_key, id, rpc) do
     case rpc do
       "DownloadResponse" -> :telemetry.execute([:caretaker, :acs, :download, :response], %{}, %{})
       "RebootResponse" -> :telemetry.execute([:caretaker, :acs, :reboot, :response], %{}, %{})
       _ -> :ok
     end
 
+    # A SetParameterValuesResponse (or other ack) completes its correlated task.
+    notify_tasks(:complete, id, %{response: rpc})
     next_or_204(conn, caller_key)
   end
 
@@ -257,17 +263,35 @@ defmodule Caretaker.ACS.Server do
       end
 
     case next do
-      {:ok, cmd_body} ->
+      {:ok, cmd_body, meta} ->
         :telemetry.execute([:caretaker, :acs, :queue, :dequeue], %{}, %{rpc: :next})
 
         ns = Session.cwmp_ns_for_caller(caller_key) || @default_cwmp_ns
-        id = Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
+        id = meta[:id] || Base.encode16(:crypto.strong_rand_bytes(6), case: :upper)
+        notify_tasks(:delivered, id, nil)
         {:ok, envelope} = SOAP.encode_envelope(cmd_body, %{id: id, cwmp_ns: ns})
         xml(conn, 200, envelope)
 
       :empty ->
         text(conn, 204, "")
     end
+  end
+
+  # Notify the task registry of a lifecycle transition keyed by cwmp:ID, when it
+  # is running. Commands with no correlated task (e.g. the ACS's own probe GPV)
+  # simply have no matching task and are ignored.
+  defp notify_tasks(_event, nil, _data), do: :ok
+
+  defp notify_tasks(event, id, data) do
+    if Process.whereis(Caretaker.ACS.Tasks) do
+      case event do
+        :delivered -> Caretaker.ACS.Tasks.mark_delivered(id)
+        :complete -> Caretaker.ACS.Tasks.complete(id, data)
+        :fault -> Caretaker.ACS.Tasks.fault(id, data)
+      end
+    end
+
+    :ok
   end
 
   # -- Request helpers --

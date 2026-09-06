@@ -26,16 +26,16 @@ defmodule Caretaker.ACS.SessionTTLTest do
     :ok = Session.queue_command(@dev, "stale", ttl_ms: 0)
     :ok = Session.queue_command(@dev, "live2", ttl_ms: 60_000)
 
-    assert {:ok, "live"} = Session.next_command(@dev)
+    assert {:ok, "live", _} = Session.next_command(@dev)
     # "stale" is dropped, "live2" delivered
-    assert {:ok, "live2"} = Session.next_command(@dev)
+    assert {:ok, "live2", _} = Session.next_command(@dev)
     assert :empty = Session.next_command(@dev)
   end
 
   test "ttl_ms: :infinity never expires" do
     Session.upsert(@dev, @device_id, @ns)
     :ok = Session.queue_command(@dev, "forever", ttl_ms: :infinity)
-    assert {:ok, "forever"} = Session.next_command(@dev)
+    assert {:ok, "forever", _} = Session.next_command(@dev)
   end
 
   test "cancel_by_tag removes matching queued commands across devices" do
@@ -49,7 +49,7 @@ defmodule Caretaker.ACS.SessionTTLTest do
 
     assert {:ok, 2} = Session.cancel_by_tag("pass-2")
 
-    assert {:ok, "keep"} = Session.next_command(@dev)
+    assert {:ok, "keep", _} = Session.next_command(@dev)
     assert :empty = Session.next_command(@dev)
     assert :empty = Session.next_command(d2)
   end

@@ -103,7 +103,7 @@ defmodule Caretaker.ACS.Session do
     GenServer.call(__MODULE__, {:enqueue_for_caller, caller_key, cmd, opts})
   end
 
-  @spec next_for_caller(caller_key()) :: {:ok, command()} | :empty
+  @spec next_for_caller(caller_key()) :: {:ok, command(), map()} | :empty
   def next_for_caller(caller_key) do
     GenServer.call(__MODULE__, {:dequeue_for_caller, caller_key})
   end
@@ -155,7 +155,7 @@ defmodule Caretaker.ACS.Session do
     queue_for_caller({:ip, ip}, cmd, opts)
   end
 
-  @spec next_for_ip(:inet.ip_address()) :: {:ok, command()} | :empty
+  @spec next_for_ip(:inet.ip_address()) :: {:ok, command(), map()} | :empty
   def next_for_ip(ip) do
     next_for_caller({:ip, ip})
   end
@@ -177,7 +177,11 @@ defmodule Caretaker.ACS.Session do
   @spec cancel_by_tag(term()) :: {:ok, non_neg_integer()}
   def cancel_by_tag(tag), do: GenServer.call(__MODULE__, {:cancel_by_tag, tag})
 
-  @spec next_command(device_key()) :: {:ok, command()} | :empty
+  @doc "Remove the not-yet-delivered queued command with the given correlation id."
+  @spec cancel_by_id(term()) :: {:ok, non_neg_integer()}
+  def cancel_by_id(id), do: GenServer.call(__MODULE__, {:cancel_by_id, id})
+
+  @spec next_command(device_key()) :: {:ok, command(), map()} | :empty
   def next_command(dev_key), do: GenServer.call(__MODULE__, {:dequeue_dev, dev_key})
 
   @spec device_key_for_ip(:inet.ip_address()) :: device_key | nil
@@ -292,6 +296,18 @@ defmodule Caretaker.ACS.Session do
   end
 
   @impl true
+  def handle_call({:cancel_by_id, id}, _from, state) do
+    {sessions, removed} =
+      Enum.reduce(state.sessions, {%{}, 0}, fn {dev_key, sess}, {acc, n} ->
+        kept = :queue.filter(fn e -> entry_id(e) != id end, sess.queue)
+        dropped = :queue.len(sess.queue) - :queue.len(kept)
+        {Map.put(acc, dev_key, %{sess | queue: kept}), n + dropped}
+      end)
+
+    {:reply, {:ok, removed}, %{state | sessions: sessions}}
+  end
+
+  @impl true
   def handle_call({:cancel_by_tag, tag}, _from, state) do
     {sessions, removed} =
       Enum.reduce(state.sessions, {%{}, 0}, fn {dev_key, sess}, {acc, n} ->
@@ -402,7 +418,7 @@ defmodule Caretaker.ACS.Session do
 
           pop_live(q2, dev_key)
         else
-          {{:ok, entry_cmd(entry)}, q2}
+          {{:ok, entry_cmd(entry), %{id: entry_id(entry), tag: entry_tag(entry)}}, q2}
         end
 
       {:empty, _} ->
@@ -421,7 +437,7 @@ defmodule Caretaker.ACS.Session do
         ms when is_integer(ms) -> now_ms() + ms
       end
 
-    %{cmd: cmd, expires_at: expires_at, tag: Keyword.get(opts, :tag)}
+    %{cmd: cmd, expires_at: expires_at, tag: Keyword.get(opts, :tag), id: Keyword.get(opts, :id)}
   end
 
   defp expired?(%{expires_at: :infinity}), do: false
@@ -434,6 +450,9 @@ defmodule Caretaker.ACS.Session do
 
   defp entry_tag(%{tag: tag}), do: tag
   defp entry_tag(_), do: nil
+
+  defp entry_id(%{id: id}), do: id
+  defp entry_id(_), do: nil
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 

@@ -22,7 +22,8 @@ defmodule Caretaker.MixProject do
           "docs/telemetry.md",
           "docs/release_checklist.md",
           "docs/acs_setup.md",
-          "docs/adding_rpc.md"
+          "docs/adding_rpc.md",
+          "docs/task_api.md"
         ],
         source_ref: "main"
       ]

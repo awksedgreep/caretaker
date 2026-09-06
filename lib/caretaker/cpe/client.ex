@@ -522,7 +522,10 @@ defmodule Caretaker.CPE.Client do
   defp parse_parameter_values(xml) do
     case parse_rpc_fragment(xml) do
       {:ok, parsed} ->
-        parsed
+        # The parsed fragment nests ParameterList under the RPC element.
+        node = parsed["cwmp:SetParameterValues"] || parsed["SetParameterValues"] || parsed
+
+        node
         |> get_in(["ParameterList", "ParameterValueStruct"])
         |> List.wrap()
         |> Enum.map(fn struct ->
