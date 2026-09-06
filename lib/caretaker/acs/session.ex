@@ -32,6 +32,10 @@ defmodule Caretaker.ACS.Session do
         }
 
   @default_binding_ttl :timer.minutes(5)
+  # Queued commands expire by default so a change can never be delivered days
+  # later, outside any maintenance window (see #35). Callers may override per
+  # command; expiry is opt-out, not opt-in.
+  @default_command_ttl :timer.hours(6)
   @default_sweep_interval :timer.minutes(1)
 
   def child_spec(opts \\ []) do
@@ -61,6 +65,7 @@ defmodule Caretaker.ACS.Session do
       sessions: %{},
       bindings: %{},
       binding_ttl: Keyword.get(opts, :binding_ttl, @default_binding_ttl),
+      command_ttl: Keyword.get(opts, :command_ttl, @default_command_ttl),
       sweep_interval: Keyword.get(opts, :sweep_interval, @default_sweep_interval)
     }
 
@@ -90,9 +95,12 @@ defmodule Caretaker.ACS.Session do
     GenServer.call(__MODULE__, {:bind_alias, existing_key, new_key})
   end
 
-  @spec queue_for_caller(caller_key(), command()) :: :ok
-  def queue_for_caller(caller_key, cmd) do
-    GenServer.call(__MODULE__, {:enqueue_for_caller, caller_key, cmd})
+  @typedoc "Options for a queued command: :ttl_ms (integer or :infinity) and :tag."
+  @type queue_opts :: [ttl_ms: non_neg_integer() | :infinity, tag: term()]
+
+  @spec queue_for_caller(caller_key(), command(), queue_opts()) :: :ok
+  def queue_for_caller(caller_key, cmd, opts \\ []) do
+    GenServer.call(__MODULE__, {:enqueue_for_caller, caller_key, cmd, opts})
   end
 
   @spec next_for_caller(caller_key()) :: {:ok, command()} | :empty
@@ -142,9 +150,9 @@ defmodule Caretaker.ACS.Session do
     upsert_for_caller_with_context({:ip, ip}, device_id, cwmp_ns, device_context)
   end
 
-  @spec queue_for_ip(:inet.ip_address(), command()) :: :ok
-  def queue_for_ip(ip, cmd) do
-    queue_for_caller({:ip, ip}, cmd)
+  @spec queue_for_ip(:inet.ip_address(), command(), queue_opts()) :: :ok
+  def queue_for_ip(ip, cmd, opts \\ []) do
+    queue_for_caller({:ip, ip}, cmd, opts)
   end
 
   @spec next_for_ip(:inet.ip_address()) :: {:ok, command()} | :empty
@@ -157,8 +165,17 @@ defmodule Caretaker.ACS.Session do
   def upsert(dev_key, device_id, cwmp_ns),
     do: GenServer.cast(__MODULE__, {:upsert_dev, dev_key, device_id, cwmp_ns})
 
-  @spec queue_command(device_key(), command()) :: :ok
-  def queue_command(dev_key, cmd), do: GenServer.cast(__MODULE__, {:enqueue_dev, dev_key, cmd})
+  @spec queue_command(device_key(), command(), queue_opts()) :: :ok
+  def queue_command(dev_key, cmd, opts \\ []),
+    do: GenServer.cast(__MODULE__, {:enqueue_dev, dev_key, cmd, opts})
+
+  @doc """
+  Cancel every not-yet-delivered queued command carrying `tag`, across all
+  devices. Returns the number of commands removed. This is the fleet-wide kill
+  switch for a batch of queued changes (#35).
+  """
+  @spec cancel_by_tag(term()) :: {:ok, non_neg_integer()}
+  def cancel_by_tag(tag), do: GenServer.call(__MODULE__, {:cancel_by_tag, tag})
 
   @spec next_command(device_key()) :: {:ok, command()} | :empty
   def next_command(dev_key), do: GenServer.call(__MODULE__, {:dequeue_dev, dev_key})
@@ -214,14 +231,14 @@ defmodule Caretaker.ACS.Session do
   end
 
   @impl true
-  def handle_call({:enqueue_for_caller, caller_key, cmd}, _from, state) do
+  def handle_call({:enqueue_for_caller, caller_key, cmd, opts}, _from, state) do
     case lookup(state, caller_key) do
       nil ->
         {:reply, :ok, state}
 
       dev_key ->
         sess = session(state, dev_key)
-        q = :queue.in(cmd, sess.queue)
+        q = :queue.in(entry(cmd, opts, state), sess.queue)
         {:reply, :ok, put_session(state, dev_key, %{sess | queue: q}) |> touch(caller_key)}
     end
   end
@@ -275,6 +292,22 @@ defmodule Caretaker.ACS.Session do
   end
 
   @impl true
+  def handle_call({:cancel_by_tag, tag}, _from, state) do
+    {sessions, removed} =
+      Enum.reduce(state.sessions, {%{}, 0}, fn {dev_key, sess}, {acc, n} ->
+        kept = :queue.filter(fn e -> entry_tag(e) != tag end, sess.queue)
+        dropped = :queue.len(sess.queue) - :queue.len(kept)
+        {Map.put(acc, dev_key, %{sess | queue: kept}), n + dropped}
+      end)
+
+    if removed > 0 do
+      :telemetry.execute([:caretaker, :acs, :queue, :cancelled], %{count: removed}, %{tag: tag})
+    end
+
+    {:reply, {:ok, removed}, %{state | sessions: sessions}}
+  end
+
+  @impl true
   def handle_call(:stats, _from, state) do
     {:reply, %{bindings: map_size(state.bindings), sessions: map_size(state.sessions)}, state}
   end
@@ -286,9 +319,9 @@ defmodule Caretaker.ACS.Session do
   end
 
   @impl true
-  def handle_cast({:enqueue_dev, dev_key, cmd}, state) do
+  def handle_cast({:enqueue_dev, dev_key, cmd, opts}, state) do
     sess = session(state, dev_key)
-    q = :queue.in(cmd, sess.queue)
+    q = :queue.in(entry(cmd, opts, state), sess.queue)
     {:noreply, put_session(state, dev_key, %{sess | queue: q})}
   end
 
@@ -349,15 +382,58 @@ defmodule Caretaker.ACS.Session do
   defp dequeue(state, dev_key) do
     case Map.get(state.sessions, dev_key) do
       %{queue: q} = sess ->
-        case :queue.out(q) do
-          {{:value, cmd}, q2} -> {{:ok, cmd}, put_session(state, dev_key, %{sess | queue: q2})}
-          {:empty, _} -> {:empty, state}
-        end
+        {result, q2} = pop_live(q, dev_key)
+        {result, put_session(state, dev_key, %{sess | queue: q2})}
 
       nil ->
         {:empty, state}
     end
   end
+
+  # Pop the first non-expired command, discarding any expired ones ahead of it.
+  defp pop_live(q, dev_key) do
+    case :queue.out(q) do
+      {{:value, entry}, q2} ->
+        if expired?(entry) do
+          :telemetry.execute([:caretaker, :acs, :queue, :expired], %{count: 1}, %{
+            device_key: dev_key,
+            tag: entry_tag(entry)
+          })
+
+          pop_live(q2, dev_key)
+        else
+          {{:ok, entry_cmd(entry)}, q2}
+        end
+
+      {:empty, _} ->
+        {:empty, q}
+    end
+  end
+
+  # -- command entries (cmd + expiry + tag) --
+
+  defp entry(cmd, opts, state) do
+    ttl = Keyword.get(opts, :ttl_ms, state.command_ttl)
+
+    expires_at =
+      case ttl do
+        :infinity -> :infinity
+        ms when is_integer(ms) -> now_ms() + ms
+      end
+
+    %{cmd: cmd, expires_at: expires_at, tag: Keyword.get(opts, :tag)}
+  end
+
+  defp expired?(%{expires_at: :infinity}), do: false
+  defp expired?(%{expires_at: deadline}), do: now_ms() >= deadline
+  # Tolerate any legacy raw command still sitting in a queue.
+  defp expired?(_), do: false
+
+  defp entry_cmd(%{cmd: cmd}), do: cmd
+  defp entry_cmd(cmd), do: cmd
+
+  defp entry_tag(%{tag: tag}), do: tag
+  defp entry_tag(_), do: nil
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 
