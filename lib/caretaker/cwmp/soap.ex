@@ -167,7 +167,7 @@ defmodule Caretaker.CWMP.SOAP do
 
     case Regex.run(~r/<#{escaped}(?:\s[^>]*)?(?:\/>|>.*?<\/#{escaped}\s*>)/s, xml) do
       [frag] ->
-        normalize_prefix(frag, key)
+        frag |> normalize_prefix(key) |> with_ancestor_namespaces(xml)
 
       _ ->
         case Lather.Xml.Builder.build_fragment(%{key => node}) do
@@ -175,6 +175,37 @@ defmodule Caretaker.CWMP.SOAP do
           _ -> nil
         end
     end
+  end
+
+  # The sliced RPC element is re-parsed standalone by the RPC decoders, but its
+  # children can reference xmlns prefixes declared on the ancestor SOAP Envelope
+  # rather than on the RPC element itself — e.g. real CPEs emit
+  # `soap-enc:arrayType="..."` on <Event>/<ParameterList> and `xsi:type="xsd:..."`
+  # on values, with soap-enc/xsi/xsd/cwmp declared up on <soap:Envelope>. Parsed
+  # on its own the fragment would hit `namespace_prefix_not_declared`. Re-inject
+  # the document's `xmlns:*` declarations onto the sliced root so it parses alone.
+  defp with_ancestor_namespaces(nil, _xml), do: nil
+
+  defp with_ancestor_namespaces(frag, xml) do
+    decls =
+      ~r/xmlns:[\w.-]+="[^"]*"/
+      |> Regex.scan(xml)
+      |> List.flatten()
+      |> Enum.uniq()
+
+    Regex.replace(
+      ~r/^\s*(<[^\s>\/]+)((?:\s[^>]*?)?)(\s*\/?>)/s,
+      frag,
+      fn whole, tag, attrs, close ->
+        missing =
+          decls
+          |> Enum.reject(&String.contains?(attrs, &1))
+          |> Enum.map_join(&(" " <> &1))
+
+        if missing == "", do: whole, else: tag <> attrs <> missing <> close
+      end,
+      global: false
+    )
   end
 
   defp normalize_prefix(frag, key) do
