@@ -5,7 +5,7 @@ defmodule Caretaker.CWMP.SOAP do
   Spec-driven defaults:
   - SOAP 1.1 Envelope namespace: http://schemas.xmlsoap.org/soap/envelope/
   - Mirror CWMP namespace from CPE when known; default to urn:dslforum-org:cwmp-1-0
-  - Always include cwmp:ID with mustUnderstand="1" when an ID is provided
+  - Always include cwmp:ID with soapenv:mustUnderstand="1" when an ID is provided
   """
 
   @type cwmp_id :: String.t()
@@ -19,11 +19,13 @@ defmodule Caretaker.CWMP.SOAP do
 
   @soapenv "http://schemas.xmlsoap.org/soap/envelope/"
   @default_cwmp "urn:dslforum-org:cwmp-1-0"
+  @cwmp_namespaces Enum.map(0..4, &"urn:dslforum-org:cwmp-1-#{&1}")
 
   @doc "Encode a CWMP SOAP envelope from an RPC body fragment using Lather (SOAP 1.1)"
   @spec encode_envelope(iodata() | map(), header_opts()) :: {:ok, iodata()}
   def encode_envelope(body, headers \\ %{}) do
     cwmp_ns = Map.get(headers, :cwmp_ns, @default_cwmp)
+    cwmp_ns = if cwmp_ns in @cwmp_namespaces, do: cwmp_ns, else: @default_cwmp
     id = Map.get(headers, :id)
 
     body_xml =
@@ -44,7 +46,7 @@ defmodule Caretaker.CWMP.SOAP do
     header_map =
       case id do
         nil -> header_map
-        id -> Map.put(header_map, "cwmp:ID", %{"@mustUnderstand" => "1", "#text" => id})
+        id -> Map.put(header_map, "cwmp:ID", %{"@soapenv:mustUnderstand" => "1", "#text" => id})
       end
 
     header_map =

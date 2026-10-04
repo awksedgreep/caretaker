@@ -13,7 +13,7 @@ defmodule Caretaker.CWMP.SOAPHeaderTest do
     bin = IO.iodata_to_binary(xml)
 
     assert bin =~ ~s/xmlns:cwmp="urn:dslforum-org:cwmp-1-2"/
-    assert bin =~ ~s/<cwmp:ID mustUnderstand="1">ABC123<\/cwmp:ID>/
+    assert bin =~ ~s/<cwmp:ID soapenv:mustUnderstand="1">ABC123<\/cwmp:ID>/
   end
 
   test "encode_envelope defaults cwmp ns to 1-0 when not provided" do

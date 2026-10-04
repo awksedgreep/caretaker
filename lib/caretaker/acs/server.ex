@@ -4,6 +4,7 @@ defmodule Caretaker.ACS.Server do
 
   Session flow (TR-069 §3.7):
   - Inform -> InformResponse (the device is detected and bound to the caller)
+  - GetRPCMethods -> GetRPCMethodsResponse (leaves queued commands untouched)
   - Any CPE RPC response, Fault, or empty POST -> the next queued RPC, or 204
     when the queue is empty (which ends the session)
 
@@ -19,9 +20,11 @@ defmodule Caretaker.ACS.Server do
 
   alias Caretaker.ACS.{DeviceDetection, Session}
   alias Caretaker.CWMP.SOAP
+  alias Caretaker.TR069.RPC.GetRPCMethodsResponse
 
   @default_cwmp_ns "urn:dslforum-org:cwmp-1-0"
   @session_cookie "caretaker_sid"
+  @supported_methods ["Inform", "GetRPCMethods", "TransferComplete"]
 
   # Store mount opts (e.g. inbound auth config) so route handlers can read them.
   @impl Plug
@@ -105,10 +108,14 @@ defmodule Caretaker.ACS.Server do
       {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "Inform", xml: inform_xml}}} ->
         handle_inform(conn, caller_key, id, ns, inform_xml)
 
+      {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "GetRPCMethods"}}} ->
+        handle_get_rpc_methods(conn, id, ns)
+
       {:ok, %{header: %{id: id, cwmp_ns: ns}, body: %{rpc: "TransferComplete", xml: tc_xml}}} ->
         handle_transfer_complete(conn, id, ns, tc_xml)
 
-      {:ok, %{header: %{id: id}, body: %{rpc: "GetParameterValuesResponse", xml: body_xml, node: node}}} ->
+      {:ok,
+       %{header: %{id: id}, body: %{rpc: "GetParameterValuesResponse", xml: body_xml, node: node}}} ->
         handle_gpv_response(conn, caller_key, id, body_xml, node)
 
       {:ok, %{header: %{id: id}, body: %{rpc: "Fault", xml: fault_xml}}} ->
@@ -126,6 +133,12 @@ defmodule Caretaker.ACS.Server do
     end
   end
 
+  defp handle_get_rpc_methods(conn, id, ns) do
+    {:ok, body} = GetRPCMethodsResponse.encode(GetRPCMethodsResponse.new(@supported_methods))
+    {:ok, envelope} = SOAP.encode_envelope(body, %{id: id, cwmp_ns: ns})
+    xml(conn, 200, envelope)
+  end
+
   defp handle_inform(conn, caller_key, id, ns, inform_xml) do
     with {:ok, decoded} <- Caretaker.TR069.RPC.Inform.decode(inform_xml),
          inform = %{decoded | source_ip: source_ip(conn)},
@@ -136,9 +149,9 @@ defmodule Caretaker.ACS.Server do
            }),
          {:ok, conn} <- bind_session(conn, caller_key, inform, ns),
          {:ok, resp_body} <-
-           Caretaker.TR069.RPC.InformResponse.encode(
-             %Caretaker.TR069.RPC.InformResponse{max_envelopes: 1}
-           ),
+           Caretaker.TR069.RPC.InformResponse.encode(%Caretaker.TR069.RPC.InformResponse{
+             max_envelopes: 1
+           }),
          {:ok, envelope} <- SOAP.encode_envelope(resp_body, %{id: id, cwmp_ns: ns}) do
       xml(conn, 200, envelope)
     else
@@ -206,7 +219,9 @@ defmodule Caretaker.ACS.Server do
 
       _ ->
         # No session bound to this caller: nothing to store, nothing queued
-        if session_running?(), do: soap_fault(conn, 400, "8005", "Request could not be processed"), else: text(conn, 204, "")
+        if session_running?(),
+          do: soap_fault(conn, 400, "8005", "Request could not be processed"),
+          else: text(conn, 204, "")
     end
   end
 

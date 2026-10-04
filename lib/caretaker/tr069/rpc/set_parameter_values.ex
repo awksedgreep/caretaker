@@ -19,18 +19,20 @@ defmodule Caretaker.TR069.RPC.SetParameterValues do
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{parameters: params, parameter_key: key}) do
     plist = %{
+      "@xmlns:soap-enc" => "http://schemas.xmlsoap.org/soap/encoding/",
       "@xsi:type" => "cwmp:ParameterValueList",
-      "@arrayType" => "cwmp:ParameterValueStruct[#{length(params)}]",
-      "ParameterValueStruct" =>
+      "@soap-enc:arrayType" => "cwmp:ParameterValueStruct[#{length(params)}]",
+      "#content" =>
         Enum.map(params, fn %{name: n, value: v, type: t} ->
-          %{"Name" => n, "Value" => %{"@xsi:type" => t, "#text" => v}}
+          {"ParameterValueStruct", %{"Name" => n, "Value" => %{"@xsi:type" => t, "#text" => v}}}
         end)
     }
 
     map = %{
       "cwmp:SetParameterValues" => %{
-        "ParameterList" => plist,
-        "ParameterKey" => key
+        # CWMP requires ParameterList before ParameterKey (an ordinary map
+        # does not preserve this sequence).
+        "#content" => [{"ParameterList", plist}, {"ParameterKey", key}]
       }
     }
 

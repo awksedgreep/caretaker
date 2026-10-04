@@ -4,7 +4,7 @@ defmodule Caretaker.MixProject do
   def project do
     [
       app: :caretaker,
-      version: "0.4.0",
+      version: "0.4.1",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -60,7 +60,8 @@ defmodule Caretaker.MixProject do
       maintainers: ["Mark Cotner"],
       links: %{"GitHub" => "https://github.com/awksedgreep/caretaker"},
       # Ship only the library and its docs; keep internal planning material out.
-      files: ~w(lib priv mix.exs README.md LICENSE CHANGELOG.md getting_started.md testing.md docs)
+      files:
+        ~w(lib priv mix.exs README.md LICENSE CHANGELOG.md getting_started.md testing.md docs)
     ]
   end
 end

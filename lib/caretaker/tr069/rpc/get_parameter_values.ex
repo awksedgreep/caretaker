@@ -15,7 +15,7 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
   Encode body element (without SOAP Envelope).
 
   `ParameterNames` is a SOAP array of direct `<string>` children carrying
-  xsi:type/arrayType attributes.
+  xsi:type and SOAP-qualified arrayType attributes.
   """
   @spec encode(t()) :: {:ok, iodata()}
   def encode(%__MODULE__{names: names}) do
@@ -28,9 +28,10 @@ defmodule Caretaker.TR069.RPC.GetParameterValues do
     map = %{
       "cwmp:GetParameterValues" => %{
         "ParameterNames" => %{
+          "@xmlns:soap-enc" => "http://schemas.xmlsoap.org/soap/encoding/",
           "@xsi:type" => "cwmp:ParameterNames",
-          "@arrayType" => "xsd:string[#{length(names)}]",
-          "string" => names
+          "@soap-enc:arrayType" => "xsd:string[#{length(names)}]",
+          "#content" => Enum.map(names, &{"string", &1})
         }
       }
     }

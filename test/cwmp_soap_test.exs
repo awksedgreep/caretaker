@@ -14,10 +14,18 @@ defmodule Caretaker.CWMP.SOAPTest do
     assert xml =~ ~s|xmlns:cwmp="urn:dslforum-org:cwmp-1-0"|
 
     assert xml =~
-             ~s|<soapenv:Header><cwmp:ID mustUnderstand="1">abc123</cwmp:ID></soapenv:Header>|
+             ~s|<soapenv:Header><cwmp:ID soapenv:mustUnderstand="1">abc123</cwmp:ID></soapenv:Header>|
 
     assert xml =~
              ~s|<soapenv:Body><cwmp:InformResponse><MaxEnvelopes>1</MaxEnvelopes></cwmp:InformResponse></soapenv:Body>|
+
+    {document, []} = :xmerl_scan.string(String.to_charlist(xml), namespace_conformant: true)
+
+    path =
+      ~c"string(//*[local-name()='ID']/@*[local-name()='mustUnderstand' and namespace-uri()='http://schemas.xmlsoap.org/soap/envelope/'])"
+
+    assert {:xmlObj, :string, ~c"1"} = :xmerl_xpath.string(path, document)
+    assert [] == :xmerl_xpath.string(~c"//*[local-name()='ID']/@mustUnderstand", document)
   end
 
   test "decode_envelope extracts id, cwmp_ns, and rpc local-name" do

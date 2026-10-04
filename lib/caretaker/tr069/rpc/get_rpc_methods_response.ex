@@ -16,7 +16,11 @@ defmodule Caretaker.TR069.RPC.GetRPCMethodsResponse do
   def encode(%__MODULE__{methods: list}) do
     map = %{
       "cwmp:GetRPCMethodsResponse" => %{
-        "MethodList" => %{"string" => list}
+        "MethodList" => %{
+          "@xmlns:soap-enc" => "http://schemas.xmlsoap.org/soap/encoding/",
+          "@soap-enc:arrayType" => "xsd:string[#{length(list)}]",
+          "#content" => Enum.map(list, &{"string", &1})
+        }
       }
     }
 

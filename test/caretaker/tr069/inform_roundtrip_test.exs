@@ -35,7 +35,7 @@ defmodule Caretaker.TR069.InformRoundtripTest do
     expected = File.read!(Path.join(@fixtures, "inform_response.xml"))
     assert resp_bin =~ "<cwmp:InformResponse>"
     assert resp_bin =~ "<MaxEnvelopes>1</MaxEnvelopes>"
-    assert resp_bin =~ "<cwmp:ID mustUnderstand=\"1\">ID123</cwmp:ID>"
+    assert resp_bin =~ "<cwmp:ID soapenv:mustUnderstand=\"1\">ID123</cwmp:ID>"
     assert resp_bin =~ "xmlns:cwmp=\"urn:dslforum-org:cwmp-1-0\""
 
     # Loose comparison due to whitespace/attribute order differences

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.4.1 - 2026-10-04
+
+### Fixed
+- Preserve inherited namespace declarations when decoding sliced CWMP RPC
+  fragments, allowing real CPE Informs with SOAP array attributes to parse (#49).
+- Qualify CWMP ID's `mustUnderstand` and parameter-array `arrayType` attributes
+  with their SOAP namespaces, and include array metadata on `MethodList` (#50).
+- Preserve the required `ParameterList`, then `ParameterKey` argument order in
+  `SetParameterValues` (#51).
+- Answer ACS `GetRPCMethods` requests with the implemented methods, echoing the
+  request ID and supported CWMP namespace without consuming queued tasks (#52).
+  Unknown outgoing CWMP namespaces fall back to CWMP 1.0.
+
 ## v0.4.0 - 2026-09-06
 
 ### Added
